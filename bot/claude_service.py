@@ -7,7 +7,14 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
-_client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+_client = None
+
+
+def _get_client():
+    global _client
+    if _client is None:
+        _client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    return _client
 
 SYSTEM_PROMPT = """\
 너는 Spring Boot 코드를 분석하고 수정하는 봇이다.
@@ -55,7 +62,7 @@ def analyze_error(
     )
 
     try:
-        response = _client.messages.create(
+        response = _get_client().messages.create(
             model="claude-sonnet-4-5-20250929",
             max_tokens=4096,
             system=SYSTEM_PROMPT,

@@ -2,14 +2,21 @@ from github import Github
 
 from config import settings
 
-_github = Github(settings.github_token)
-_repo = _github.get_repo(settings.github_repo)
+_repo = None
+
+
+def _get_repo():
+    global _repo
+    if _repo is None:
+        github = Github(settings.github_token)
+        _repo = github.get_repo(settings.github_repo)
+    return _repo
 
 
 def fetch_file_content(file_path: str) -> str | None:
     """GitHub에서 파일 내용을 조회한다. 없으면 None 반환."""
     try:
-        content = _repo.get_contents(file_path, ref=settings.github_base_branch)
+        content = _get_repo().get_contents(file_path, ref=settings.github_base_branch)
         return content.decoded_content.decode("utf-8")
     except Exception:
         return None
