@@ -6,7 +6,7 @@ from functools import partial
 
 from pydantic import BaseModel
 
-from claude_service import analyze_error
+from ai_service import analyze_error
 from config import settings
 from discord_service import send_error_alert, send_pr_alert
 from github_service import create_pull_request, fetch_files
@@ -72,7 +72,7 @@ async def process_error(report: ErrorReport) -> None:
             logger.warning("GitHub에서 파일을 조회하지 못함: %s", file_paths)
             return
 
-        # 3. Claude API로 분석 (동기 → run_in_executor)
+        # 3. AI API로 분석 (동기 → run_in_executor)
         result = await loop.run_in_executor(
             None,
             partial(
@@ -84,7 +84,7 @@ async def process_error(report: ErrorReport) -> None:
             ),
         )
         if not result:
-            logger.warning("Claude 분석 결과 없음")
+            logger.warning("AI 분석 결과 없음")
             return
 
         summary = result.get("summary", "에러 자동 수정")

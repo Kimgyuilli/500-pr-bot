@@ -11,7 +11,7 @@ Detailed plan: `docs/Error bot project plan.md`
 ## Tech Stack
 
 - **Bot**: Python + FastAPI (async)
-- **AI**: Claude API (Sonnet 4.5)
+- **AI**: OpenAI API (gpt-4o-mini) — `ai_service.py`에서 교체 가능
 - **VCS**: GitHub REST API (PyGithub)
 - **Notifications**: Discord Webhook
 
@@ -19,7 +19,7 @@ Detailed plan: `docs/Error bot project plan.md`
 
 ```
 Spring Boot 500 error → POST /webhook/error → FastAPI bot
-  → Discord alert → GitHub code fetch → Claude analyze/fix → Create PR → Discord completion alert
+  → Discord alert → GitHub code fetch → AI analyze/fix → Create PR → Discord completion alert
 ```
 
 ## Coding Guidelines
