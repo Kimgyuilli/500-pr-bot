@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import logging
+import time
 from datetime import datetime, timezone
 from functools import partial
 
@@ -8,11 +9,31 @@ from pydantic import BaseModel
 
 from app.services.ai_service import analyze_error
 from app.config import settings
-from app.services.discord_service import send_error_alert, send_pr_alert
+from app.services.discord_service import send_error_alert, send_failure_alert, send_pr_alert
 from app.services.github_service import create_pull_request, fetch_files
 from app.utils.stack_trace_parser import parse_stack_trace
 
 logger = logging.getLogger(__name__)
+
+# 중복 에러 필터링
+_recent_errors: dict[str, float] = {}  # {dedup_key: timestamp}
+DEDUP_TTL = 1800  # 30분
+
+
+def _is_duplicate(report: "ErrorReport") -> bool:
+    key = hashlib.sha256(
+        f"{report.errorType}{report.errorMessage}{report.stackTrace[:200]}".encode()
+    ).hexdigest()
+    now = time.time()
+    # 만료된 항목 정리
+    expired = [k for k, t in _recent_errors.items() if now - t > DEDUP_TTL]
+    for k in expired:
+        del _recent_errors[k]
+    # 중복 체크
+    if key in _recent_errors:
+        return True
+    _recent_errors[key] = now
+    return False
 
 
 class ErrorReport(BaseModel):
@@ -56,6 +77,11 @@ def _build_pr_body(report: "ErrorReport", analysis: str, summary: str) -> str:
 
 async def process_error(report: ErrorReport) -> None:
     try:
+        # 0. 중복 에러 필터링
+        if _is_duplicate(report):
+            logger.info("중복 에러 무시: %s", report.errorType)
+            return
+
         await send_error_alert(report)
 
         # 1. 스택트레이스 파싱
@@ -85,6 +111,7 @@ async def process_error(report: ErrorReport) -> None:
         )
         if not result:
             logger.warning("AI 분석 결과 없음")
+            await send_failure_alert(report, "AI 분석 실패")
             return
 
         summary = result.get("summary", "에러 자동 수정")
@@ -102,16 +129,22 @@ async def process_error(report: ErrorReport) -> None:
         pr_body = _build_pr_body(report, analysis, summary)
 
         # 6. GitHub PR 생성 (동기 → run_in_executor)
-        pr_url = await loop.run_in_executor(
-            None,
-            partial(
-                create_pull_request,
-                files=result["files"],
-                summary=summary,
-                pr_body=pr_body,
-                branch_name=branch_name,
-            ),
-        )
+        try:
+            pr_url = await loop.run_in_executor(
+                None,
+                partial(
+                    create_pull_request,
+                    files=result["files"],
+                    summary=summary,
+                    pr_body=pr_body,
+                    branch_name=branch_name,
+                ),
+            )
+        except Exception as e:
+            logger.exception("PR 생성 실패")
+            await send_failure_alert(report, f"PR 생성 실패: {e}")
+            return
+
         logger.info("PR 생성 완료: %s", pr_url)
 
         # 7. Discord PR 완료 알림
