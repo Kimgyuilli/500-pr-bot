@@ -6,8 +6,7 @@ import org.springframework.stereotype.Service;
 public class UserService {
 
     public String getUser(Long id) {
-        String value = null;
-        // BUG: null 체크 없이 length() 호출
+        String value = "Default User"; // 기본 사용자 문자열로 초기화
         return "User name length: " + value.length();
     }
 }
