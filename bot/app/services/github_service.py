@@ -1,6 +1,11 @@
+import logging
+
 from github import Github
+from tenacity import retry, stop_after_attempt, wait_fixed
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 _repo = None
 
@@ -22,6 +27,7 @@ def fetch_file_content(file_path: str) -> str | None:
         return None
 
 
+@retry(stop=stop_after_attempt(2), wait=wait_fixed(2), reraise=True)
 def fetch_files(file_paths: list[str]) -> dict[str, str]:
     """여러 파일을 조회해서 {경로: 내용} 딕셔너리로 반환한다."""
     results = {}
@@ -32,6 +38,7 @@ def fetch_files(file_paths: list[str]) -> dict[str, str]:
     return results
 
 
+@retry(stop=stop_after_attempt(2), wait=wait_fixed(2), reraise=True)
 def create_pull_request(
     files: list[dict],
     summary: str,

@@ -2,6 +2,7 @@ import json
 import logging
 
 from openai import OpenAI
+from tenacity import retry, stop_after_attempt, wait_fixed
 
 from app.config import settings
 
@@ -47,6 +48,7 @@ def _build_source_section(files: dict[str, str]) -> str:
     return "\n\n".join(parts)
 
 
+@retry(stop=stop_after_attempt(2), wait=wait_fixed(2), reraise=True)
 def analyze_error(
     error_type: str,
     error_message: str,
