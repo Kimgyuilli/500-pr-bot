@@ -48,30 +48,45 @@ PR_BODY_TEMPLATE = """\
 ## 자동 생성된 에러 수정 PR
 
 ### 에러 정보
-- **타입**: {error_type}
-- **메시지**: {error_message}
-- **요청**: {request_url}
-- **발생 시간**: {timestamp}
+| 항목 | 내용 |
+|------|------|
+| 타입 | `{error_type}` |
+| 메시지 | {error_message} |
+| 요청 | {request_url} |
+| 발생 시간 | {timestamp} |
+
+### 근본 원인
+{root_cause}
 
 ### AI 분석
 {analysis}
 
-### 변경 사항
-{summary}
+### 수정 내용
+{fix_description}
+
+### 수정된 파일
+{changed_files}
 
 ---
 > 이 PR은 Error Bot이 자동으로 생성했습니다.
 > 반드시 코드 리뷰 후 머지하세요."""
 
 
-def _build_pr_body(report: "ErrorReport", analysis: str, summary: str) -> str:
+def _build_pr_body(report: "ErrorReport", result: dict) -> str:
+    changed_files_list = result.get("files", [])
+    changed_files = "\n".join(
+        f"- `{f['path']}`" for f in changed_files_list
+    ) or "- 없음"
+
     return PR_BODY_TEMPLATE.format(
         error_type=report.errorType,
         error_message=report.errorMessage,
         request_url=report.requestUrl,
         timestamp=report.timestamp,
-        analysis=analysis,
-        summary=summary,
+        root_cause=result.get("root_cause", ""),
+        analysis=result.get("analysis", ""),
+        fix_description=result.get("fix_description", ""),
+        changed_files=changed_files,
     )
 
 
@@ -99,6 +114,7 @@ async def process_error(report: ErrorReport) -> None:
             return
 
         # 2-1. import 기반 관련 파일 추가 fetch (1 depth)
+        error_files = dict(files)  # 스택트레이스 파일 = error_files
         fetched_paths = set(files.keys())
         related_paths = []
         for source_code in files.values():
@@ -106,11 +122,11 @@ async def process_error(report: ErrorReport) -> None:
                 extract_related_imports(source_code, settings.base_package, fetched_paths)
             )
         related_paths = list(dict.fromkeys(p for p in related_paths if p not in fetched_paths))
+        context_files: dict[str, str] = {}
         if related_paths:
-            related_files = await loop.run_in_executor(
+            context_files = await loop.run_in_executor(
                 None, partial(fetch_files, related_paths)
             )
-            files.update(related_files)
 
         # 3. AI API로 분석 (동기 → run_in_executor)
         result = await loop.run_in_executor(
@@ -120,7 +136,8 @@ async def process_error(report: ErrorReport) -> None:
                 error_type=report.errorType,
                 error_message=report.errorMessage,
                 stack_trace=report.stackTrace,
-                files=files,
+                error_files=error_files,
+                context_files=context_files,
             ),
         )
         if not result:
@@ -140,7 +157,7 @@ async def process_error(report: ErrorReport) -> None:
         branch_name = f"fix/error-{short_hash}-{ts}"
 
         # 5. PR 본문 생성
-        pr_body = _build_pr_body(report, analysis, summary)
+        pr_body = _build_pr_body(report, result)
 
         # 6. GitHub PR 생성 (동기 → run_in_executor)
         try:
