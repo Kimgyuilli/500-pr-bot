@@ -11,7 +11,7 @@ from app.services.ai_service import analyze_error
 from app.config import settings
 from app.services.discord_service import send_error_alert, send_failure_alert, send_pr_alert
 from app.services.github_service import create_pull_request, fetch_files
-from app.utils.stack_trace_parser import parse_stack_trace
+from app.utils.stack_trace_parser import extract_related_imports, parse_stack_trace
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +97,20 @@ async def process_error(report: ErrorReport) -> None:
         if not files:
             logger.warning("GitHub에서 파일을 조회하지 못함: %s", file_paths)
             return
+
+        # 2-1. import 기반 관련 파일 추가 fetch (1 depth)
+        fetched_paths = set(files.keys())
+        related_paths = []
+        for source_code in files.values():
+            related_paths.extend(
+                extract_related_imports(source_code, settings.base_package, fetched_paths)
+            )
+        related_paths = list(dict.fromkeys(p for p in related_paths if p not in fetched_paths))
+        if related_paths:
+            related_files = await loop.run_in_executor(
+                None, partial(fetch_files, related_paths)
+            )
+            files.update(related_files)
 
         # 3. AI API로 분석 (동기 → run_in_executor)
         result = await loop.run_in_executor(

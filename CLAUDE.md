@@ -39,6 +39,8 @@ Spring Boot 500 error → POST /webhook/error → FastAPI bot
 **Turn tasks into verifiable goals.**
 - For multi-step tasks, plan as `[step] → verify: [check]`.
 
+**모든 프로그램 실행은 도커 환경에서 합니다**
+
 ## Language
 
 Project docs and commit messages are written in Korean.
