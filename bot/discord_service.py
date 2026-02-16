@@ -20,3 +20,20 @@ async def send_error_alert(report) -> None:
     async with httpx.AsyncClient() as client:
         response = await client.post(settings.discord_webhook_url, json=payload)
         response.raise_for_status()
+
+
+async def send_pr_alert(pr_url: str, summary: str) -> None:
+    embed = {
+        "title": "✅ 자동 수정 PR 생성",
+        "color": 0x00FF00,
+        "fields": [
+            {"name": "변경 사항", "value": summary[:1024]},
+            {"name": "PR 링크", "value": pr_url},
+        ],
+    }
+
+    payload = {"embeds": [embed]}
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(settings.discord_webhook_url, json=payload)
+        response.raise_for_status()

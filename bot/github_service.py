@@ -30,3 +30,41 @@ def fetch_files(file_paths: list[str]) -> dict[str, str]:
         if content is not None:
             results[path] = content
     return results
+
+
+def create_pull_request(
+    files: list[dict],
+    summary: str,
+    pr_body: str,
+    branch_name: str,
+) -> str:
+    """브랜치 생성 → 파일 커밋 → PR 생성. PR URL 반환."""
+    repo = _get_repo()
+    base_branch = settings.github_base_branch
+
+    # 1. base 브랜치의 최신 SHA 가져오기
+    base_ref = repo.get_git_ref(f"heads/{base_branch}")
+    base_sha = base_ref.object.sha
+
+    # 2. 새 브랜치 생성
+    repo.create_git_ref(f"refs/heads/{branch_name}", base_sha)
+
+    # 3. 수정된 파일 커밋
+    for f in files:
+        existing = repo.get_contents(f["path"], ref=branch_name)
+        repo.update_file(
+            path=f["path"],
+            message=f"fix: {summary}",
+            content=f["content"],
+            sha=existing.sha,
+            branch=branch_name,
+        )
+
+    # 4. PR 생성
+    pr = repo.create_pull(
+        title=f"fix: {summary}",
+        body=pr_body,
+        head=branch_name,
+        base=base_branch,
+    )
+    return pr.html_url

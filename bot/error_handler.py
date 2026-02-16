@@ -1,13 +1,15 @@
 import asyncio
+import hashlib
 import logging
+from datetime import datetime, timezone
 from functools import partial
 
 from pydantic import BaseModel
 
 from claude_service import analyze_error
 from config import settings
-from discord_service import send_error_alert
-from github_service import fetch_files
+from discord_service import send_error_alert, send_pr_alert
+from github_service import create_pull_request, fetch_files
 from stack_trace_parser import parse_stack_trace
 
 logger = logging.getLogger(__name__)
@@ -19,6 +21,37 @@ class ErrorReport(BaseModel):
     stackTrace: str
     requestUrl: str
     timestamp: str
+
+
+PR_BODY_TEMPLATE = """\
+## 자동 생성된 에러 수정 PR
+
+### 에러 정보
+- **타입**: {error_type}
+- **메시지**: {error_message}
+- **요청**: {request_url}
+- **발생 시간**: {timestamp}
+
+### AI 분석
+{analysis}
+
+### 변경 사항
+{summary}
+
+---
+> 이 PR은 Error Bot이 자동으로 생성했습니다.
+> 반드시 코드 리뷰 후 머지하세요."""
+
+
+def _build_pr_body(report: "ErrorReport", analysis: str, summary: str) -> str:
+    return PR_BODY_TEMPLATE.format(
+        error_type=report.errorType,
+        error_message=report.errorMessage,
+        request_url=report.requestUrl,
+        timestamp=report.timestamp,
+        analysis=analysis,
+        summary=summary,
+    )
 
 
 async def process_error(report: ErrorReport) -> None:
@@ -54,8 +87,35 @@ async def process_error(report: ErrorReport) -> None:
             logger.warning("Claude 분석 결과 없음")
             return
 
-        logger.info("분석 완료: %s", result.get("summary", ""))
-        # Phase 3에서 여기에 PR 생성 로직 추가 예정
+        summary = result.get("summary", "에러 자동 수정")
+        analysis = result.get("analysis", "")
+        logger.info("분석 완료: %s", summary)
+
+        # 4. 브랜치명 생성
+        short_hash = hashlib.sha256(
+            f"{report.errorType}{report.errorMessage}".encode()
+        ).hexdigest()[:7]
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        branch_name = f"fix/error-{short_hash}-{ts}"
+
+        # 5. PR 본문 생성
+        pr_body = _build_pr_body(report, analysis, summary)
+
+        # 6. GitHub PR 생성 (동기 → run_in_executor)
+        pr_url = await loop.run_in_executor(
+            None,
+            partial(
+                create_pull_request,
+                files=result["files"],
+                summary=summary,
+                pr_body=pr_body,
+                branch_name=branch_name,
+            ),
+        )
+        logger.info("PR 생성 완료: %s", pr_url)
+
+        # 7. Discord PR 완료 알림
+        await send_pr_alert(pr_url, summary)
 
     except Exception:
         logger.exception("에러 처리 중 실패")
