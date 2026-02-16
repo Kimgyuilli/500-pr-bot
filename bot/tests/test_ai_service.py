@@ -18,11 +18,21 @@ def _make_mock_client(content: str):
 
 
 def test_analyze_error_returns_parsed_response():
-    expected = {"analysis": "원인", "files": [], "summary": "수정"}
+    expected = {
+        "analysis": "원인",
+        "root_cause": "null 체크 누락",
+        "fix_description": "null 체크 추가",
+        "files": [],
+        "summary": "수정",
+    }
     client = _make_mock_client(json.dumps(expected))
 
     with patch("app.services.ai_service._get_client", return_value=client):
-        result = analyze_error("NPE", "msg", "trace", {"a.java": "code"})
+        result = analyze_error(
+            "NPE", "msg", "trace",
+            error_files={"a.java": "code"},
+            context_files={"b.java": "ref code"},
+        )
 
     assert result == expected
 
@@ -31,7 +41,7 @@ def test_analyze_error_returns_none_on_invalid_json():
     client = _make_mock_client("not json")
 
     with patch("app.services.ai_service._get_client", return_value=client):
-        result = analyze_error("NPE", "msg", "trace", {"a.java": "code"})
+        result = analyze_error("NPE", "msg", "trace", error_files={"a.java": "code"})
 
     assert result is None
 
@@ -41,7 +51,7 @@ def test_analyze_error_returns_none_on_api_exception():
     client.chat.completions.create.side_effect = RuntimeError("API down")
 
     with patch("app.services.ai_service._get_client", return_value=client):
-        result = analyze_error("NPE", "msg", "trace", {"a.java": "code"})
+        result = analyze_error("NPE", "msg", "trace", error_files={"a.java": "code"})
 
     assert result is None
     # tenacity retry(2회)로 2번 호출됨

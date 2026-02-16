@@ -6,6 +6,8 @@ from app.error_handler import process_error
 async def test_process_error_full_flow(sample_error_report, mock_discord):
     ai_result = {
         "analysis": "NPE 원인 분석",
+        "root_cause": "null 체크 누락",
+        "fix_description": "null 체크 추가",
         "files": [{"path": "Foo.java", "content": "fixed"}],
         "summary": "NPE 수정",
     }
@@ -24,7 +26,7 @@ async def test_process_error_full_flow(sample_error_report, mock_discord):
 async def test_process_error_skips_duplicate(sample_error_report, mock_discord):
     with (
         patch("app.error_handler.fetch_files", return_value={"Foo.java": "code"}),
-        patch("app.error_handler.analyze_error", return_value={"analysis": "", "files": [], "summary": "s"}),
+        patch("app.error_handler.analyze_error", return_value={"analysis": "", "root_cause": "", "fix_description": "", "files": [], "summary": "s"}),
         patch("app.error_handler.create_pull_request", return_value="url"),
     ):
         await process_error(sample_error_report)
@@ -60,9 +62,35 @@ async def test_process_error_ai_failure_sends_failure_alert(sample_error_report,
     mock_discord["failure"].assert_awaited_once()
 
 
+async def test_pr_body_contains_new_sections(sample_error_report, mock_discord):
+    ai_result = {
+        "analysis": "NPE 원인 분석",
+        "root_cause": "null 체크 누락",
+        "fix_description": "UserService에 null 체크 추가",
+        "files": [{"path": "Foo.java", "content": "fixed"}],
+        "summary": "NPE 수정",
+    }
+    with (
+        patch("app.error_handler.fetch_files", return_value={"Foo.java": "code"}),
+        patch("app.error_handler.analyze_error", return_value=ai_result),
+        patch("app.error_handler.create_pull_request", return_value="https://github.com/pr/1") as mock_pr,
+    ):
+        await process_error(sample_error_report)
+
+    pr_body = mock_pr.call_args.kwargs["pr_body"]
+    assert "### 근본 원인" in pr_body
+    assert "null 체크 누락" in pr_body
+    assert "### 수정 내용" in pr_body
+    assert "UserService에 null 체크 추가" in pr_body
+    assert "### 수정된 파일" in pr_body
+    assert "`Foo.java`" in pr_body
+
+
 async def test_process_error_pr_failure_sends_failure_alert(sample_error_report, mock_discord):
     ai_result = {
         "analysis": "분석",
+        "root_cause": "원인",
+        "fix_description": "수정 설명",
         "files": [{"path": "Foo.java", "content": "fixed"}],
         "summary": "수정",
     }
