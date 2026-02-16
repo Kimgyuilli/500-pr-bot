@@ -2,7 +2,7 @@ import json
 import logging
 
 from openai import OpenAI
-from tenacity import retry, stop_after_attempt, wait_fixed
+from tenacity import retry, retry_if_not_exception_type, stop_after_attempt, wait_fixed
 
 from app.config import settings
 
@@ -48,7 +48,26 @@ def _build_source_section(files: dict[str, str]) -> str:
     return "\n\n".join(parts)
 
 
-@retry(stop=stop_after_attempt(2), wait=wait_fixed(2), reraise=True)
+@retry(
+    stop=stop_after_attempt(2),
+    wait=wait_fixed(2),
+    retry=retry_if_not_exception_type((json.JSONDecodeError, IndexError, KeyError)),
+    reraise=True,
+)
+def _call_openai(user_prompt: str) -> dict:
+    """OpenAI API 호출 + JSON 파싱. 네트워크 오류만 재시도."""
+    response = _get_client().chat.completions.create(
+        model="gpt-4o-mini",
+        max_tokens=4096,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ],
+    )
+    text = response.choices[0].message.content
+    return json.loads(text)
+
+
 def analyze_error(
     error_type: str,
     error_message: str,
@@ -64,16 +83,7 @@ def analyze_error(
     )
 
     try:
-        response = _get_client().chat.completions.create(
-            model="gpt-4o-mini",
-            max_tokens=4096,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ],
-        )
-        text = response.choices[0].message.content
-        return json.loads(text)
+        return _call_openai(user_prompt)
     except (json.JSONDecodeError, IndexError, KeyError) as e:
         logger.error("OpenAI 응답 파싱 실패: %s", e)
         return None

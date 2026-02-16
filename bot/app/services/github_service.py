@@ -1,6 +1,6 @@
 import logging
 
-from github import Github
+from github import Github, GithubException
 from tenacity import retry, stop_after_attempt, wait_fixed
 
 from app.config import settings
@@ -53,8 +53,14 @@ def create_pull_request(
     base_ref = repo.get_git_ref(f"heads/{base_branch}")
     base_sha = base_ref.object.sha
 
-    # 2. 새 브랜치 생성
-    repo.create_git_ref(f"refs/heads/{branch_name}", base_sha)
+    # 2. 새 브랜치 생성 (이미 존재하면 재사용)
+    try:
+        repo.create_git_ref(f"refs/heads/{branch_name}", base_sha)
+    except GithubException as e:
+        if e.status == 422:  # already exists
+            logger.warning("브랜치 이미 존재, 재사용: %s", branch_name)
+        else:
+            raise
 
     # 3. 수정된 파일 커밋
     for f in files:

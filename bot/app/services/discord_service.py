@@ -7,6 +7,13 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+_client = httpx.AsyncClient()
+
+
+async def _post_webhook(payload: dict) -> None:
+    response = await _client.post(settings.discord_webhook_url, json=payload)
+    response.raise_for_status()
+
 
 @retry(stop=stop_after_attempt(2), wait=wait_fixed(1), reraise=True)
 async def send_error_alert(report) -> None:
@@ -20,12 +27,7 @@ async def send_error_alert(report) -> None:
             {"name": "발생 시간", "value": report.timestamp, "inline": True},
         ],
     }
-
-    payload = {"embeds": [embed]}
-
-    async with httpx.AsyncClient() as client:
-        response = await client.post(settings.discord_webhook_url, json=payload)
-        response.raise_for_status()
+    await _post_webhook({"embeds": [embed]})
 
 
 @retry(stop=stop_after_attempt(2), wait=wait_fixed(1), reraise=True)
@@ -38,12 +40,7 @@ async def send_pr_alert(pr_url: str, summary: str) -> None:
             {"name": "PR 링크", "value": pr_url},
         ],
     }
-
-    payload = {"embeds": [embed]}
-
-    async with httpx.AsyncClient() as client:
-        response = await client.post(settings.discord_webhook_url, json=payload)
-        response.raise_for_status()
+    await _post_webhook({"embeds": [embed]})
 
 
 @retry(stop=stop_after_attempt(2), wait=wait_fixed(1), reraise=True)
@@ -58,9 +55,4 @@ async def send_failure_alert(report, reason: str) -> None:
             {"name": "실패 사유", "value": reason[:1024]},
         ],
     }
-
-    payload = {"embeds": [embed]}
-
-    async with httpx.AsyncClient() as client:
-        response = await client.post(settings.discord_webhook_url, json=payload)
-        response.raise_for_status()
+    await _post_webhook({"embeds": [embed]})
