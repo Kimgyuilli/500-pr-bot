@@ -3,5 +3,5 @@ services:
     build: ./bot
     ports:
       - "8000:8000"
-    # env_file:
-    #   - ./bot/.env
+    env_file:
+      - ./bot/.env
