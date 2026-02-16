@@ -5,3 +5,5 @@ httpx
 openai
 PyGithub
 tenacity
+pytest
+pytest-asyncio

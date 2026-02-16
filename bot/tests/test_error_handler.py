@@ -1,0 +1,76 @@
+from unittest.mock import patch
+
+from app.error_handler import process_error
+
+
+async def test_process_error_full_flow(sample_error_report, mock_discord):
+    ai_result = {
+        "analysis": "NPE 원인 분석",
+        "files": [{"path": "Foo.java", "content": "fixed"}],
+        "summary": "NPE 수정",
+    }
+    with (
+        patch("app.error_handler.fetch_files", return_value={"Foo.java": "code"}),
+        patch("app.error_handler.analyze_error", return_value=ai_result),
+        patch("app.error_handler.create_pull_request", return_value="https://github.com/pr/1"),
+    ):
+        await process_error(sample_error_report)
+
+    mock_discord["error"].assert_awaited_once()
+    mock_discord["pr"].assert_awaited_once()
+    mock_discord["failure"].assert_not_awaited()
+
+
+async def test_process_error_skips_duplicate(sample_error_report, mock_discord):
+    with (
+        patch("app.error_handler.fetch_files", return_value={"Foo.java": "code"}),
+        patch("app.error_handler.analyze_error", return_value={"analysis": "", "files": [], "summary": "s"}),
+        patch("app.error_handler.create_pull_request", return_value="url"),
+    ):
+        await process_error(sample_error_report)
+        await process_error(sample_error_report)  # 두 번째는 중복
+
+    # send_error_alert는 1번만 호출
+    assert mock_discord["error"].await_count == 1
+
+
+async def test_process_error_no_stack_entries(mock_discord):
+    from app.error_handler import ErrorReport
+
+    report = ErrorReport(
+        errorType="RuntimeException",
+        errorMessage="error",
+        stackTrace="at org.spring.Foo.bar(Foo.java:1)",  # base_package 매칭 안 됨
+        requestUrl="GET /api",
+        timestamp="2026-01-01T00:00:00Z",
+    )
+    await process_error(report)
+
+    mock_discord["error"].assert_awaited_once()
+    mock_discord["pr"].assert_not_awaited()
+
+
+async def test_process_error_ai_failure_sends_failure_alert(sample_error_report, mock_discord):
+    with (
+        patch("app.error_handler.fetch_files", return_value={"Foo.java": "code"}),
+        patch("app.error_handler.analyze_error", return_value=None),
+    ):
+        await process_error(sample_error_report)
+
+    mock_discord["failure"].assert_awaited_once()
+
+
+async def test_process_error_pr_failure_sends_failure_alert(sample_error_report, mock_discord):
+    ai_result = {
+        "analysis": "분석",
+        "files": [{"path": "Foo.java", "content": "fixed"}],
+        "summary": "수정",
+    }
+    with (
+        patch("app.error_handler.fetch_files", return_value={"Foo.java": "code"}),
+        patch("app.error_handler.analyze_error", return_value=ai_result),
+        patch("app.error_handler.create_pull_request", side_effect=RuntimeError("fail")),
+    ):
+        await process_error(sample_error_report)
+
+    mock_discord["failure"].assert_awaited_once()
