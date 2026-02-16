@@ -1,7 +1,7 @@
 import json
 import logging
 
-import anthropic
+from openai import OpenAI
 
 from config import settings
 
@@ -13,7 +13,7 @@ _client = None
 def _get_client():
     global _client
     if _client is None:
-        _client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        _client = OpenAI(api_key=settings.openai_api_key)
     return _client
 
 SYSTEM_PROMPT = """\
@@ -53,7 +53,7 @@ def analyze_error(
     stack_trace: str,
     files: dict[str, str],
 ) -> dict | None:
-    """Claude API로 에러를 분석하고 수정안을 반환한다. 실패 시 None."""
+    """OpenAI API로 에러를 분석하고 수정안을 반환한다. 실패 시 None."""
     user_prompt = USER_PROMPT_TEMPLATE.format(
         error_type=error_type,
         error_message=error_message,
@@ -62,17 +62,19 @@ def analyze_error(
     )
 
     try:
-        response = _get_client().messages.create(
-            model="claude-sonnet-4-5-20250929",
+        response = _get_client().chat.completions.create(
+            model="gpt-4o-mini",
             max_tokens=4096,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_prompt}],
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
         )
-        text = response.content[0].text
+        text = response.choices[0].message.content
         return json.loads(text)
     except (json.JSONDecodeError, IndexError, KeyError) as e:
-        logger.error("Claude 응답 파싱 실패: %s", e)
+        logger.error("OpenAI 응답 파싱 실패: %s", e)
         return None
     except Exception:
-        logger.exception("Claude API 호출 실패")
+        logger.exception("OpenAI API 호출 실패")
         return None

@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    anthropic_api_key: str
+    openai_api_key: str
     github_token: str
     github_repo: str
     github_base_branch: str = "main"

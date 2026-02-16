@@ -2,5 +2,5 @@ fastapi
 uvicorn[standard]
 pydantic-settings
 httpx
-anthropic
+openai
 PyGithub
