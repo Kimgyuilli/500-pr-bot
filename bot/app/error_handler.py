@@ -6,11 +6,11 @@ from functools import partial
 
 from pydantic import BaseModel
 
-from ai_service import analyze_error
-from config import settings
-from discord_service import send_error_alert, send_pr_alert
-from github_service import create_pull_request, fetch_files
-from stack_trace_parser import parse_stack_trace
+from app.services.ai_service import analyze_error
+from app.config import settings
+from app.services.discord_service import send_error_alert, send_pr_alert
+from app.services.github_service import create_pull_request, fetch_files
+from app.utils.stack_trace_parser import parse_stack_trace
 
 logger = logging.getLogger(__name__)
 

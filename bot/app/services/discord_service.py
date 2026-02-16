@@ -1,6 +1,6 @@
 import httpx
 
-from config import settings
+from app.config import settings
 
 
 async def send_error_alert(report) -> None:

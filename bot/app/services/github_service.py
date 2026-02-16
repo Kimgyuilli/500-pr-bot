@@ -1,6 +1,6 @@
 from github import Github
 
-from config import settings
+from app.config import settings
 
 _repo = None
 

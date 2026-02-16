@@ -5,7 +5,7 @@ from fastapi import FastAPI
 
 logging.basicConfig(level=logging.INFO)
 
-from error_handler import ErrorReport, process_error
+from app.error_handler import ErrorReport, process_error
 
 app = FastAPI(title="500 Error Auto-Fix Bot")
 

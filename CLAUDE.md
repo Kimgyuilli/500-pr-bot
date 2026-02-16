@@ -11,7 +11,7 @@ Detailed plan: `docs/Error bot project plan.md`
 ## Tech Stack
 
 - **Bot**: Python + FastAPI (async)
-- **AI**: OpenAI API (gpt-4o-mini) — `ai_service.py`에서 교체 가능
+- **AI**: OpenAI API (gpt-4o-mini) — `bot/app/services/ai_service.py`에서 교체 가능
 - **VCS**: GitHub REST API (PyGithub)
 - **Notifications**: Discord Webhook
 
