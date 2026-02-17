@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from app.services.ai_service import analyze_error
 from app.config import settings
+from app.event_store import emit, make_event
 from app.services.discord_service import send_error_alert, send_failure_alert, send_pr_alert
 from app.services.github_service import create_pull_request, fetch_files
 from app.utils.stack_trace_parser import extract_related_imports, parse_stack_trace
@@ -91,26 +92,35 @@ def _build_pr_body(report: "ErrorReport", result: dict) -> str:
 
 
 async def process_error(report: ErrorReport) -> None:
+    error_id = hashlib.sha256(
+        f"{report.errorType}{report.errorMessage}".encode()
+    ).hexdigest()[:7]
+
     try:
         # 0. 중복 에러 필터링
         if _is_duplicate(report):
             logger.info("중복 에러 무시: %s", report.errorType)
             return
 
+        await emit(make_event(error_id, "received", f"{report.errorType} 수신"))
         await send_error_alert(report)
 
         # 1. 스택트레이스 파싱
+        await emit(make_event(error_id, "parsing", "스택트레이스 파싱 중..."))
         entries = parse_stack_trace(report.stackTrace, settings.base_package)
         if not entries:
             logger.warning("스택트레이스에서 프로젝트 코드를 찾지 못함")
+            await emit(make_event(error_id, "failed", "스택트레이스에서 프로젝트 코드를 찾지 못함"))
             return
 
         # 2. GitHub에서 소스코드 조회 (동기 → run_in_executor)
         file_paths = [e["file"] for e in entries]
+        await emit(make_event(error_id, "fetching", f"{len(file_paths)}개 파일 조회 중..."))
         loop = asyncio.get_running_loop()
         files = await loop.run_in_executor(None, partial(fetch_files, file_paths))
         if not files:
             logger.warning("GitHub에서 파일을 조회하지 못함: %s", file_paths)
+            await emit(make_event(error_id, "failed", "GitHub에서 파일을 조회하지 못함"))
             return
 
         # 2-1. import 기반 관련 파일 추가 fetch (1 depth)
@@ -129,6 +139,7 @@ async def process_error(report: ErrorReport) -> None:
             )
 
         # 3. AI API로 분석 (동기 → run_in_executor)
+        await emit(make_event(error_id, "analyzing", "AI 분석 중..."))
         result = await loop.run_in_executor(
             None,
             partial(
@@ -142,6 +153,7 @@ async def process_error(report: ErrorReport) -> None:
         )
         if not result:
             logger.warning("AI 분석 결과 없음")
+            await emit(make_event(error_id, "failed", "AI 분석 실패"))
             await send_failure_alert(report, "AI 분석 실패")
             return
 
@@ -150,16 +162,14 @@ async def process_error(report: ErrorReport) -> None:
         logger.info("분석 완료: %s", summary)
 
         # 4. 브랜치명 생성
-        short_hash = hashlib.sha256(
-            f"{report.errorType}{report.errorMessage}".encode()
-        ).hexdigest()[:7]
         ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-        branch_name = f"fix/error-{short_hash}-{ts}"
+        branch_name = f"fix/error-{error_id}-{ts}"
 
         # 5. PR 본문 생성
         pr_body = _build_pr_body(report, result)
 
         # 6. GitHub PR 생성 (동기 → run_in_executor)
+        await emit(make_event(error_id, "creating_pr", "PR 생성 중..."))
         try:
             pr_url = await loop.run_in_executor(
                 None,
@@ -173,13 +183,16 @@ async def process_error(report: ErrorReport) -> None:
             )
         except Exception as e:
             logger.exception("PR 생성 실패")
+            await emit(make_event(error_id, "failed", f"PR 생성 실패: {e}"))
             await send_failure_alert(report, f"PR 생성 실패: {e}")
             return
 
         logger.info("PR 생성 완료: %s", pr_url)
+        await emit(make_event(error_id, "done", f"PR 생성 완료: {pr_url}", data={"pr_url": pr_url}))
 
         # 7. Discord PR 완료 알림
         await send_pr_alert(pr_url, summary)
 
     except Exception:
         logger.exception("에러 처리 중 실패")
+        await emit(make_event(error_id, "failed", "에러 처리 중 예외 발생"))

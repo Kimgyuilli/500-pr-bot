@@ -1,6 +1,14 @@
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from app.error_handler import process_error
+
+
+@pytest.fixture(autouse=True)
+def _mock_emit():
+    with patch("app.error_handler.emit", new_callable=AsyncMock):
+        yield
 
 
 async def test_process_error_full_flow(sample_error_report, mock_discord):

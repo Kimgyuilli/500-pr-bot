@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>500 Error Bot Dashboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0f1117;
+    color: #e1e4e8;
+    min-height: 100vh;
+    padding: 24px;
+  }
+  h1 { font-size: 1.5rem; margin-bottom: 24px; color: #fff; }
+  h2 { font-size: 1.1rem; margin-bottom: 12px; color: #8b949e; font-weight: 500; }
+
+  /* 플로우 시각화 */
+  .pipeline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 32px;
+    overflow-x: auto;
+    padding: 16px;
+    background: #161b22;
+    border-radius: 12px;
+    border: 1px solid #30363d;
+  }
+  .step {
+    flex: 1;
+    min-width: 120px;
+    padding: 16px 12px;
+    border-radius: 8px;
+    text-align: center;
+    background: #21262d;
+    border: 2px solid #30363d;
+    transition: all 0.3s ease;
+  }
+  .step-name { font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; }
+  .step-status { font-size: 0.75rem; color: #8b949e; }
+  .step.active {
+    border-color: #58a6ff;
+    background: #1a2332;
+    box-shadow: 0 0 16px rgba(88, 166, 255, 0.15);
+  }
+  .step.active .step-status { color: #58a6ff; }
+  .step.done {
+    border-color: #3fb950;
+    background: #1a2e1f;
+  }
+  .step.done .step-status { color: #3fb950; }
+  .step.failed {
+    border-color: #f85149;
+    background: #2d1b1b;
+  }
+  .step.failed .step-status { color: #f85149; }
+  .arrow { color: #30363d; font-size: 1.2rem; flex-shrink: 0; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  .step.active .step-status { animation: pulse 1.5s ease-in-out infinite; }
+
+  /* 중단 영역 */
+  .middle {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 24px;
+    margin-bottom: 32px;
+  }
+  .test-section {
+    display: flex;
+    align-items: flex-start;
+  }
+  .test-btn {
+    padding: 12px 24px;
+    background: #238636;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.2s;
+  }
+  .test-btn:hover { background: #2ea043; }
+  .test-btn:disabled { background: #21262d; cursor: not-allowed; color: #8b949e; }
+
+  /* 히스토리 테이블 */
+  .history {
+    background: #161b22;
+    border-radius: 12px;
+    border: 1px solid #30363d;
+    overflow: hidden;
+  }
+  .history table { width: 100%; border-collapse: collapse; }
+  .history th {
+    text-align: left;
+    padding: 10px 14px;
+    background: #21262d;
+    font-size: 0.8rem;
+    color: #8b949e;
+    font-weight: 500;
+  }
+  .history td {
+    padding: 10px 14px;
+    font-size: 0.85rem;
+    border-top: 1px solid #21262d;
+  }
+  .history tr:hover td { background: #1c2128; }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  .badge.done { background: #1a2e1f; color: #3fb950; }
+  .badge.failed { background: #2d1b1b; color: #f85149; }
+  .badge.active { background: #1a2332; color: #58a6ff; }
+  .badge.pending { background: #21262d; color: #8b949e; }
+  .history a { color: #58a6ff; text-decoration: none; }
+  .history a:hover { text-decoration: underline; }
+  .empty-msg { padding: 24px; text-align: center; color: #484f58; }
+
+  /* 실시간 로그 */
+  .log-section { margin-top: 0; }
+  .log {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 16px;
+    height: 280px;
+    overflow-y: auto;
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.8rem;
+    line-height: 1.6;
+  }
+  .log-line { color: #8b949e; }
+  .log-line .ts { color: #484f58; }
+  .log-line .msg { color: #c9d1d9; }
+  .log-line.step-received .msg { color: #58a6ff; }
+  .log-line.step-done .msg { color: #3fb950; }
+  .log-line.step-failed .msg { color: #f85149; }
+
+  /* 연결 상태 */
+  .conn-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    color: #8b949e;
+    margin-left: 12px;
+  }
+  .conn-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #f85149;
+  }
+  .conn-dot.connected { background: #3fb950; }
+</style>
+</head>
+<body>
+
+<h1>500 Error Bot <span class="conn-status"><span class="conn-dot" id="connDot"></span><span id="connText">연결 중...</span></span></h1>
+
+<h2>파이프라인</h2>
+<div class="pipeline" id="pipeline">
+  <div class="step" data-step="received">
+    <div class="step-name">에러 수신</div>
+    <div class="step-status">대기</div>
+  </div>
+  <div class="arrow">→</div>
+  <div class="step" data-step="parsing">
+    <div class="step-name">파싱</div>
+    <div class="step-status">대기</div>
+  </div>
+  <div class="arrow">→</div>
+  <div class="step" data-step="fetching">
+    <div class="step-name">코드 조회</div>
+    <div class="step-status">대기</div>
+  </div>
+  <div class="arrow">→</div>
+  <div class="step" data-step="analyzing">
+    <div class="step-name">AI 분석</div>
+    <div class="step-status">대기</div>
+  </div>
+  <div class="arrow">→</div>
+  <div class="step" data-step="creating_pr">
+    <div class="step-name">PR 생성</div>
+    <div class="step-status">대기</div>
+  </div>
+</div>
+
+<div class="middle">
+  <div class="test-section">
+    <button class="test-btn" id="testBtn" onclick="sendTest()">테스트 에러 전송</button>
+  </div>
+  <div class="history">
+    <table>
+      <thead><tr><th>시간</th><th>에러 타입</th><th>상태</th><th>링크</th></tr></thead>
+      <tbody id="historyBody">
+        <tr><td colspan="4" class="empty-msg">에러 기록이 없습니다</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<h2>실시간 로그</h2>
+<div class="log" id="logArea"></div>
+
+<script>
+const STEPS = ['received', 'parsing', 'fetching', 'analyzing', 'creating_pr'];
+const STEP_LABELS = { received: '수신됨', parsing: '파싱 중', fetching: '조회 중', analyzing: '분석 중', creating_pr: '생성 중', done: '완료', failed: '실패' };
+
+let currentErrorId = null;
+
+// 플로우 시각화 업데이트
+function updatePipeline(event) {
+  const { error_id, step } = event;
+  currentErrorId = error_id;
+
+  document.querySelectorAll('.step').forEach(el => {
+    el.classList.remove('active', 'done', 'failed');
+    el.querySelector('.step-status').textContent = '대기';
+  });
+
+  if (step === 'failed') {
+    // 마지막 활성 단계를 실패로 표시
+    const allSteps = document.querySelectorAll('.step');
+    allSteps.forEach(el => {
+      el.classList.add('failed');
+      el.querySelector('.step-status').textContent = '실패';
+    });
+    return;
+  }
+
+  const stepIndex = STEPS.indexOf(step === 'done' ? 'creating_pr' : step);
+
+  STEPS.forEach((s, i) => {
+    const el = document.querySelector(`.step[data-step="${s}"]`);
+    if (i < stepIndex) {
+      el.classList.add('done');
+      el.querySelector('.step-status').textContent = '완료';
+    } else if (i === stepIndex) {
+      if (step === 'done') {
+        el.classList.add('done');
+        el.querySelector('.step-status').textContent = '완료';
+      } else {
+        el.classList.add('active');
+        el.querySelector('.step-status').textContent = STEP_LABELS[s] || '진행 중';
+      }
+    }
+  });
+}
+
+// 히스토리 테이블 업데이트
+function renderHistory(errors) {
+  const tbody = document.getElementById('historyBody');
+  if (!errors.length) {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty-msg">에러 기록이 없습니다</td></tr>';
+    return;
+  }
+  tbody.innerHTML = errors.map(e => {
+    const time = new Date(e.timestamp).toLocaleString('ko-KR', { hour12: false });
+    const badgeClass = e.step === 'done' ? 'done' : e.step === 'failed' ? 'failed' : 'active';
+    const statusText = STEP_LABELS[e.step] || e.step;
+    const link = e.data && e.data.pr_url
+      ? `<a href="${e.data.pr_url}" target="_blank">PR 보기</a>`
+      : '-';
+    return `<tr>
+      <td>${time}</td>
+      <td>${e.error_id || '-'}</td>
+      <td><span class="badge ${badgeClass}">${statusText}</span></td>
+      <td>${link}</td>
+    </tr>`;
+  }).join('');
+}
+
+// 로그 추가
+const logArea = document.getElementById('logArea');
+let logCount = 0;
+function appendLog(event) {
+  const ts = new Date(event.timestamp).toLocaleTimeString('ko-KR', { hour12: false });
+  const div = document.createElement('div');
+  div.className = `log-line step-${event.step}`;
+  div.innerHTML = `<span class="ts">[${ts}]</span> <span class="msg">[${event.error_id}] ${event.message}</span>`;
+  logArea.appendChild(div);
+  logCount++;
+  if (logCount > 200) {
+    logArea.removeChild(logArea.firstChild);
+    logCount--;
+  }
+  logArea.scrollTop = logArea.scrollHeight;
+}
+
+// SSE 연결
+function connectSSE() {
+  const es = new EventSource('/api/events');
+  const dot = document.getElementById('connDot');
+  const text = document.getElementById('connText');
+
+  es.onopen = () => {
+    dot.classList.add('connected');
+    text.textContent = '연결됨';
+  };
+  es.onmessage = (e) => {
+    const event = JSON.parse(e.data);
+    updatePipeline(event);
+    appendLog(event);
+    // 히스토리 갱신
+    fetch('/api/errors').then(r => r.json()).then(renderHistory);
+  };
+  es.onerror = () => {
+    dot.classList.remove('connected');
+    text.textContent = '재연결 중...';
+  };
+}
+
+// 테스트 전송
+async function sendTest() {
+  const btn = document.getElementById('testBtn');
+  btn.disabled = true;
+  btn.textContent = '전송 중...';
+  try {
+    await fetch('/api/test-webhook', { method: 'POST' });
+  } finally {
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.textContent = '테스트 에러 전송';
+    }, 3000);
+  }
+}
+
+// 초기화
+fetch('/api/errors').then(r => r.json()).then(renderHistory);
+connectSSE();
+</script>
+</body>
+</html>
