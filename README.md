@@ -4,7 +4,11 @@ Spring Boot 앱에서 500 에러 발생 시 AI가 자동으로 코드를 분석/
 
 ```
 Spring Boot 500 에러 → POST /webhook/error → 봇
-  → Discord 에러 알림 → GitHub 코드 조회 → AI 분석/수정 → PR 생성 → Discord PR 알림
+  → Discord 에러 알림
+  → GitHub 코드 조회 (스택트레이스 파일 + import 관련 파일)
+  → AI 분석/수정 (근본 원인 + 수정 내용 상세 분석)
+  → PR 생성 (에러 정보 테이블, 근본 원인, AI 분석, 수정 내용, 수정 파일 목록)
+  → Discord PR 알림
 ```
 
 ---
@@ -67,11 +71,11 @@ error-bot:
 │   │   ├── config.py            # 환경 변수 설정
 │   │   ├── error_handler.py     # 에러 처리 오케스트레이션
 │   │   ├── services/
-│   │   │   ├── ai_service.py        # AI API 연동 (OpenAI)
+│   │   │   ├── ai_service.py        # AI 분석 (에러/참고 파일 분리 프롬프트)
 │   │   │   ├── discord_service.py   # Discord 알림
 │   │   │   └── github_service.py    # GitHub API (코드 조회, PR 생성)
 │   │   └── utils/
-│   │       └── stack_trace_parser.py  # 스택트레이스 → 파일 경로 변환
+│   │       └── stack_trace_parser.py  # 스택트레이스 파싱 + import 관련 파일 추출
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   └── .env.example
@@ -92,6 +96,15 @@ error-bot:
 ### AI 모델 교체
 
 `bot/app/services/ai_service.py` 하나만 수정하면 됨. `analyze_error()` 함수의 시그니처를 유지하면 나머지 코드는 변경 불필요.
+
+---
+
+## AI 분석 흐름
+
+1. **파일 분리 수집**: 스택트레이스에 등장한 파일(`error_files`)과 import로 연결된 참고 파일(`context_files`)을 구분하여 조회
+2. **구조화된 프롬프트**: 에러 파일과 참고 파일을 분리된 섹션으로 AI에 전달 → AI가 에러 발생 지점과 참고 맥락을 혼동하지 않음
+3. **상세 응답**: AI가 `root_cause`(근본 원인), `fix_description`(수정 내용 상세), `analysis`(분석), `files`(수정 코드)를 반환
+4. **리뷰어 친화적 PR**: 에러 정보 테이블 + 근본 원인 + AI 분석 + 수정 내용 + 수정 파일 목록으로 구성된 PR 본문 자동 생성
 
 ---
 
