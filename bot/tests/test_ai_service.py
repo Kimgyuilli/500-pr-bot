@@ -3,7 +3,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.ai_service import OpenAIProvider, _PROVIDERS, analyze_error
+from app.services.ai_provider import OpenAIProvider, _PROVIDERS, get_provider
+from app.services.ai_service import analyze_error
 
 
 def _make_mock_provider(content: str):
@@ -23,7 +24,7 @@ def test_analyze_error_returns_parsed_response():
     }
     provider = _make_mock_provider(json.dumps(expected))
 
-    with patch("app.services.ai_service._get_provider", return_value=provider):
+    with patch("app.services.ai_service.get_provider", return_value=provider):
         result = analyze_error(
             "NPE", "msg", "trace",
             error_files={"a.java": "code"},
@@ -37,7 +38,7 @@ def test_analyze_error_returns_none_on_invalid_json():
     """1차, 2차 모두 invalid JSON이면 None."""
     provider = _make_mock_provider("not json")
 
-    with patch("app.services.ai_service._get_provider", return_value=provider):
+    with patch("app.services.ai_service.get_provider", return_value=provider):
         result = analyze_error("NPE", "msg", "trace", error_files={"a.java": "code"})
 
     assert result is None
@@ -57,7 +58,7 @@ def test_analyze_error_retry_succeeds_on_second_attempt():
     provider = MagicMock()
     provider.call.side_effect = ["not json", json.dumps(expected)]
 
-    with patch("app.services.ai_service._get_provider", return_value=provider):
+    with patch("app.services.ai_service.get_provider", return_value=provider):
         result = analyze_error("NPE", "msg", "trace", error_files={"a.java": "code"})
 
     assert result == expected
@@ -67,7 +68,7 @@ def test_analyze_error_returns_none_on_api_exception():
     provider = MagicMock()
     provider.call.side_effect = RuntimeError("API down")
 
-    with patch("app.services.ai_service._get_provider", return_value=provider):
+    with patch("app.services.ai_service.get_provider", return_value=provider):
         result = analyze_error("NPE", "msg", "trace", error_files={"a.java": "code"})
 
     assert result is None
@@ -77,22 +78,20 @@ def test_analyze_error_returns_none_on_api_exception():
 
 def test_get_provider_returns_openai_by_default():
     """ai_provider=openai일 때 OpenAIProvider 반환."""
-    with patch("app.services.ai_service._provider", None), \
-         patch("app.services.ai_service.settings") as mock_settings:
+    with patch("app.services.ai_provider._provider", None), \
+         patch("app.services.ai_provider.settings") as mock_settings:
         mock_settings.ai_provider = "openai"
-        from app.services.ai_service import _get_provider
-        provider = _get_provider()
+        provider = get_provider()
         assert isinstance(provider, OpenAIProvider)
 
 
 def test_get_provider_raises_on_unknown():
     """알 수 없는 provider 이름이면 ValueError."""
-    with patch("app.services.ai_service._provider", None), \
-         patch("app.services.ai_service.settings") as mock_settings:
+    with patch("app.services.ai_provider._provider", None), \
+         patch("app.services.ai_provider.settings") as mock_settings:
         mock_settings.ai_provider = "unknown"
-        from app.services.ai_service import _get_provider
         with pytest.raises(ValueError, match="알 수 없는 AI provider"):
-            _get_provider()
+            get_provider()
 
 
 def test_providers_registry_contains_openai():
