@@ -366,7 +366,7 @@
     <button class="test-btn" id="runTestsBtn" onclick="runTests()" style="background:#1f6feb;">테스트 코드 실행</button>
   </div>
 
-  <div class="test-run-section" id="testRunSection" style="display:none;">
+  <div class="test-run-section" id="testRunSection">
     <div class="test-summary-bar" id="testSummaryBar">
       <span class="count total" id="testTotal">전체: -</span>
       <span class="count pass" id="testPass">통과: -</span>
@@ -575,7 +575,6 @@ function runTests() {
   const section = document.getElementById('testRunSection');
   const logArea = document.getElementById('testLogArea');
   const tbody = document.getElementById('testResultsBody');
-  section.style.display = 'block';
   logArea.innerHTML = '';
   tbody.innerHTML = '';
   document.getElementById('testTotal').textContent = '전체: -';
