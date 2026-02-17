@@ -7,7 +7,8 @@ public class UserService {
 
     public String getUser(Long id) {
         String value = null;
-        // BUG: null 체크 없이 length() 호출
-        return "User name length: " + value.length();
+        // value가 null인지 체크하고, null이 아닐 경우에만 length() 호출
+        int length = (value != null) ? value.length() : 0;
+        return "User name length: " + length;
     }
 }
