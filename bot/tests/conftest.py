@@ -68,6 +68,7 @@ _DISPLAY_NAMES = {
     "test_no_match_summary": "테스트 파서 - 요약 줄 무시",
     "test_no_match_header": "테스트 파서 - 헤더 줄 무시",
     "test_nested_path": "테스트 파서 - 중첩 경로 파싱",
+    "test_korean_name": "테스트 파서 - 한글 이름 파싱",
 }
 
 

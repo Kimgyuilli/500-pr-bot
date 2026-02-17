@@ -1,20 +1,20 @@
 import asyncio
+import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sse_starlette.sse import EventSourceResponse
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
 from app.error_handler import ErrorReport, process_error
-from fastapi.responses import JSONResponse
 from app.event_store import get_error, get_history, subscribe
 from app.test_runner import run_tests
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="500 Error Auto-Fix Bot")
 
@@ -53,7 +53,6 @@ async def event_stream():
 
 
 async def _sse_generator():
-    import json
     async for event in subscribe():
         yield {"data": json.dumps(event, ensure_ascii=False)}
 
@@ -77,7 +76,6 @@ async def test_stream():
 
 
 async def _test_sse_generator():
-    import json
     async for event in run_tests():
         yield {"data": json.dumps(event, ensure_ascii=False)}
 
