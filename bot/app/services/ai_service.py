@@ -91,11 +91,27 @@ def analyze_error(
         source_code_section=_build_source_section(error_files, context_files or {}),
     )
 
+    # 1차 시도
     try:
         return _call_openai(user_prompt)
     except (json.JSONDecodeError, IndexError, KeyError) as e:
-        logger.error("OpenAI 응답 파싱 실패: %s", e)
-        return None
+        logger.warning("1차 AI 응답 파싱 실패, 재시도: %s", e)
     except Exception:
         logger.exception("OpenAI API 호출 실패")
+        return None
+
+    # 2차 시도: 피드백 포함
+    retry_prompt = (
+        user_prompt + "\n\n## 주의\n"
+        "이전 응답이 유효한 JSON이 아니었다. "
+        "반드시 위에 명시된 JSON 형식으로만 응답하라. "
+        "JSON 외의 텍스트를 절대 포함하지 마라."
+    )
+    try:
+        return _call_openai(retry_prompt)
+    except (json.JSONDecodeError, IndexError, KeyError) as e:
+        logger.error("2차 AI 응답 파싱도 실패: %s", e)
+        return None
+    except Exception:
+        logger.exception("OpenAI API 재시도 호출 실패")
         return None

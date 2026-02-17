@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.error_handler import process_error
+from app.error_handler import _build_diff, _validate_ai_result, process_error
 
 
 @pytest.fixture(autouse=True)
@@ -68,6 +68,83 @@ async def test_process_error_ai_failure_sends_failure_alert(sample_error_report,
         await process_error(sample_error_report)
 
     mock_discord["failure"].assert_awaited_once()
+
+
+async def test_process_error_ai_validation_failure_sends_failure_alert(sample_error_report, mock_discord):
+    ai_result = {
+        "analysis": "분석",
+        "root_cause": "원인",
+        "fix_description": "수정",
+        "files": [{"path": "Unknown.java", "content": "code"}],
+        "summary": "수정",
+    }
+    with (
+        patch("app.error_handler.fetch_files", return_value={"Foo.java": "code"}),
+        patch("app.error_handler.analyze_error", return_value=ai_result),
+        patch("app.error_handler.create_pull_request", return_value="url") as mock_pr,
+    ):
+        await process_error(sample_error_report)
+
+    mock_pr.assert_not_called()
+    mock_discord["failure"].assert_awaited_once()
+
+
+def test_validate_ai_result_no_files():
+    assert _validate_ai_result({"files": []}, {"a.java"}) == "수정 파일이 없음"
+
+
+def test_validate_ai_result_missing_path():
+    result = {"files": [{"content": "code"}]}
+    assert _validate_ai_result(result, {"a.java"}) is not None
+
+
+def test_validate_ai_result_unknown_path():
+    result = {"files": [{"path": "x.java", "content": "code"}]}
+    assert _validate_ai_result(result, {"a.java"}) is not None
+
+
+def test_validate_ai_result_empty_content():
+    result = {"files": [{"path": "a.java", "content": "  "}]}
+    assert _validate_ai_result(result, {"a.java"}) is not None
+
+
+def test_validate_ai_result_valid():
+    result = {"files": [{"path": "a.java", "content": "code"}]}
+    assert _validate_ai_result(result, {"a.java"}) is None
+
+
+def test_build_diff_shows_changes():
+    original = {"a.java": "line1\nline2\n"}
+    modified = [{"path": "a.java", "content": "line1\nline2_modified\n"}]
+    diff = _build_diff(original, modified)
+    assert "```diff" in diff
+    assert "a.java" in diff
+
+
+def test_build_diff_no_changes():
+    original = {"a.java": "same\n"}
+    modified = [{"path": "a.java", "content": "same\n"}]
+    assert _build_diff(original, modified) == "변경 없음"
+
+
+async def test_pr_body_contains_diff_section(sample_error_report, mock_discord):
+    ai_result = {
+        "analysis": "분석",
+        "root_cause": "원인",
+        "fix_description": "수정",
+        "files": [{"path": "Foo.java", "content": "fixed_code"}],
+        "summary": "수정",
+    }
+    with (
+        patch("app.error_handler.fetch_files", return_value={"Foo.java": "original_code"}),
+        patch("app.error_handler.analyze_error", return_value=ai_result),
+        patch("app.error_handler.create_pull_request", return_value="https://github.com/pr/1") as mock_pr,
+    ):
+        await process_error(sample_error_report)
+
+    pr_body = mock_pr.call_args.kwargs["pr_body"]
+    assert "### 변경 diff" in pr_body
+    assert "```diff" in pr_body
 
 
 async def test_pr_body_contains_new_sections(sample_error_report, mock_discord):

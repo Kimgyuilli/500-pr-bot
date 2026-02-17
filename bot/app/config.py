@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     base_package: str
     discord_webhook_url: str
     bot_port: int = 8000
+    import_depth: int = 1
 
     model_config = {"env_file": ".env"}
 

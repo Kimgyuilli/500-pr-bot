@@ -18,6 +18,7 @@ _DISPLAY_NAMES = {
     # test_ai_service
     "test_analyze_error_returns_parsed_response": "AI 분석 - 정상 응답 파싱",
     "test_analyze_error_returns_none_on_invalid_json": "AI 분석 - 잘못된 JSON이면 None 반환",
+    "test_analyze_error_retry_succeeds_on_second_attempt": "AI 분석 - 1차 실패 후 2차 재시도 성공",
     "test_analyze_error_returns_none_on_api_exception": "AI 분석 - API 예외 시 None 반환",
     # test_discord_service
     "test_send_error_alert_posts_correct_embed": "Discord 알림 - 에러 알림 전송",
@@ -28,6 +29,15 @@ _DISPLAY_NAMES = {
     "test_process_error_skips_duplicate": "에러 처리 - 중복 에러 무시",
     "test_process_error_no_stack_entries": "에러 처리 - 스택 항목 없으면 코드 조회 건너뜀",
     "test_process_error_ai_failure_sends_failure_alert": "에러 처리 - AI 실패 시 실패 알림 전송",
+    "test_process_error_ai_validation_failure_sends_failure_alert": "에러 처리 - AI 응답 검증 실패 시 실패 알림 전송",
+    "test_validate_ai_result_no_files": "AI 검증 - 수정 파일 없으면 실패",
+    "test_validate_ai_result_missing_path": "AI 검증 - path 누락 시 실패",
+    "test_validate_ai_result_unknown_path": "AI 검증 - 알 수 없는 경로 시 실패",
+    "test_validate_ai_result_empty_content": "AI 검증 - 빈 내용 시 실패",
+    "test_validate_ai_result_valid": "AI 검증 - 정상 응답 통과",
+    "test_build_diff_shows_changes": "diff 생성 - 변경사항 표시",
+    "test_build_diff_no_changes": "diff 생성 - 변경 없으면 '변경 없음'",
+    "test_pr_body_contains_diff_section": "에러 처리 - PR 본문에 diff 섹션 포함",
     "test_pr_body_contains_new_sections": "에러 처리 - PR 본문에 근본 원인/수정 내용 포함",
     "test_process_error_pr_failure_sends_failure_alert": "에러 처리 - PR 생성 실패 시 실패 알림 전송",
     # test_event_store
