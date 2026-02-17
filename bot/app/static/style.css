@@ -1,13 +1,93 @@
+/* 변수 */
+:root {
+  --bg-primary: #0f1117;
+  --bg-card: #161b22;
+  --bg-elevated: #21262d;
+  --bg-deep: #0d1117;
+  --border: #30363d;
+  --text-primary: #e1e4e8;
+  --text-secondary: #c9d1d9;
+  --text-muted: #8b949e;
+  --text-faint: #484f58;
+  --color-green: #3fb950;
+  --color-red: #f85149;
+  --color-blue: #58a6ff;
+  --bg-green: #1a2e1f;
+  --bg-red: #2d1b1b;
+  --bg-blue: #1a2332;
+  --font-mono: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: #0f1117;
-  color: #e1e4e8;
+  background: var(--bg-primary);
+  color: var(--text-primary);
   min-height: 100vh;
   padding: 24px;
 }
 h1 { font-size: 1.5rem; margin-bottom: 24px; color: #fff; }
-h2 { font-size: 1.1rem; margin-bottom: 12px; color: #8b949e; font-weight: 500; }
+h2 { font-size: 1.1rem; margin-bottom: 12px; color: var(--text-muted); font-weight: 500; }
+
+/* 공통: 카드 */
+.card {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+/* 공통: 상태 닷 */
+.status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+.status-dot.ok, .status-dot.connected { background: var(--color-green); }
+.status-dot.error { background: var(--color-red); }
+
+/* 공통: 테이블 */
+.data-table { width: 100%; border-collapse: collapse; }
+.data-table th {
+  text-align: left;
+  padding: 10px 14px;
+  background: var(--bg-elevated);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.data-table td {
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  border-top: 1px solid var(--bg-elevated);
+}
+
+/* 공통: 로그 영역 */
+.log-area {
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* 공통: 배지 */
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.badge.done { background: var(--bg-green); color: var(--color-green); }
+.badge.failed { background: var(--bg-red); color: var(--color-red); }
+.badge.active { background: var(--bg-blue); color: var(--color-blue); }
+.badge.pending { background: var(--bg-elevated); color: var(--text-muted); }
 
 /* 플로우 시각화 */
 .pipeline {
@@ -17,39 +97,30 @@ h2 { font-size: 1.1rem; margin-bottom: 12px; color: #8b949e; font-weight: 500; }
   margin-bottom: 32px;
   overflow-x: auto;
   padding: 16px;
-  background: #161b22;
-  border-radius: 12px;
-  border: 1px solid #30363d;
 }
 .step {
   flex: 1;
   min-width: 120px;
   padding: 16px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   text-align: center;
-  background: #21262d;
-  border: 2px solid #30363d;
+  background: var(--bg-elevated);
+  border: 2px solid var(--border);
   transition: all 0.3s ease;
 }
 .step-name { font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; }
-.step-status { font-size: 0.75rem; color: #8b949e; }
+.step-status { font-size: 0.75rem; color: var(--text-muted); }
 .step.active {
-  border-color: #58a6ff;
-  background: #1a2332;
+  border-color: var(--color-blue);
+  background: var(--bg-blue);
   box-shadow: 0 0 16px rgba(88, 166, 255, 0.15);
 }
-.step.active .step-status { color: #58a6ff; }
-.step.done {
-  border-color: #3fb950;
-  background: #1a2e1f;
-}
-.step.done .step-status { color: #3fb950; }
-.step.failed {
-  border-color: #f85149;
-  background: #2d1b1b;
-}
-.step.failed .step-status { color: #f85149; }
-.arrow { color: #30363d; font-size: 1.2rem; flex-shrink: 0; }
+.step.active .step-status { color: var(--color-blue); }
+.step.done { border-color: var(--color-green); background: var(--bg-green); }
+.step.done .step-status { color: var(--color-green); }
+.step.failed { border-color: var(--color-red); background: var(--bg-red); }
+.step.failed .step-status { color: var(--color-red); }
+.arrow { color: var(--border); font-size: 1.2rem; flex-shrink: 0; }
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }
@@ -73,7 +144,7 @@ h2 { font-size: 1.1rem; margin-bottom: 12px; color: #8b949e; font-weight: 500; }
   background: #238636;
   color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
@@ -81,76 +152,40 @@ h2 { font-size: 1.1rem; margin-bottom: 12px; color: #8b949e; font-weight: 500; }
   transition: background 0.2s;
 }
 .test-btn:hover { background: #2ea043; }
-.test-btn:disabled { background: #21262d; cursor: not-allowed; color: #8b949e; }
+.test-btn:disabled { background: var(--bg-elevated); cursor: not-allowed; color: var(--text-muted); }
 
 /* 히스토리 테이블 */
-.history {
-  background: #161b22;
-  border-radius: 12px;
-  border: 1px solid #30363d;
-  overflow: hidden;
-}
-.history table { width: 100%; border-collapse: collapse; }
-.history th {
-  text-align: left;
-  padding: 10px 14px;
-  background: #21262d;
-  font-size: 0.8rem;
-  color: #8b949e;
-  font-weight: 500;
-}
-.history td {
-  padding: 10px 14px;
-  font-size: 0.85rem;
-  border-top: 1px solid #21262d;
-}
+.history { overflow: hidden; }
 .history tr:hover td { background: #1c2128; }
-.badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-.badge.done { background: #1a2e1f; color: #3fb950; }
-.badge.failed { background: #2d1b1b; color: #f85149; }
-.badge.active { background: #1a2332; color: #58a6ff; }
-.badge.pending { background: #21262d; color: #8b949e; }
-.history a { color: #58a6ff; text-decoration: none; }
+.history a { color: var(--color-blue); text-decoration: none; }
 .history a:hover { text-decoration: underline; }
-.empty-msg { padding: 24px; text-align: center; color: #484f58; }
+.empty-msg { padding: 24px; text-align: center; color: var(--text-faint); }
 
 /* 탭 */
 .tabs {
   display: flex;
   gap: 4px;
   margin-bottom: 24px;
-  border-bottom: 1px solid #30363d;
+  border-bottom: 1px solid var(--border);
 }
 .tab-btn {
   padding: 10px 20px;
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
-  color: #8b949e;
+  color: var(--text-muted);
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
 }
-.tab-btn:hover { color: #c9d1d9; }
-.tab-btn.active { color: #58a6ff; border-bottom-color: #58a6ff; }
+.tab-btn:hover { color: var(--text-secondary); }
+.tab-btn.active { color: var(--color-blue); border-bottom-color: var(--color-blue); }
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
 
 /* 테스트 실행 결과 */
-.test-run-section {
-  margin-bottom: 32px;
-  background: #161b22;
-  border-radius: 12px;
-  border: 1px solid #30363d;
-  padding: 16px;
-}
+.test-run-section { margin-bottom: 32px; padding: 16px; }
 .test-summary-bar {
   display: flex;
   gap: 16px;
@@ -159,59 +194,23 @@ h2 { font-size: 1.1rem; margin-bottom: 12px; color: #8b949e; font-weight: 500; }
 }
 .test-summary-bar .count {
   padding: 4px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   font-weight: 600;
 }
-.count.total { background: #21262d; color: #c9d1d9; }
-.count.pass { background: #1a2e1f; color: #3fb950; }
-.count.fail { background: #2d1b1b; color: #f85149; }
-.test-log {
-  background: #0d1117;
-  border: 1px solid #30363d;
-  border-radius: 8px;
-  padding: 12px;
-  height: 200px;
-  overflow-y: auto;
-  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
-  font-size: 0.78rem;
-  line-height: 1.5;
-  color: #8b949e;
-  margin-bottom: 12px;
-}
-.test-results-table { width: 100%; border-collapse: collapse; }
-.test-results-table th {
-  text-align: left;
-  padding: 8px 12px;
-  background: #21262d;
-  font-size: 0.8rem;
-  color: #8b949e;
-  font-weight: 500;
-}
-.test-results-table td {
-  padding: 8px 12px;
-  font-size: 0.82rem;
-  border-top: 1px solid #21262d;
-}
+.count.total { background: var(--bg-elevated); color: var(--text-secondary); }
+.count.pass { background: var(--bg-green); color: var(--color-green); }
+.count.fail { background: var(--bg-red); color: var(--color-red); }
+.test-log { height: 200px; margin-bottom: 12px; font-size: 0.78rem; }
+.test-results-table td { padding: 8px 12px; font-size: 0.82rem; }
 
 /* 실시간 로그 */
-.log-section { margin-top: 0; }
-.log {
-  background: #0d1117;
-  border: 1px solid #30363d;
-  border-radius: 12px;
-  padding: 16px;
-  height: 280px;
-  overflow-y: auto;
-  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
-  font-size: 0.8rem;
-  line-height: 1.6;
-}
-.log-line { color: #8b949e; }
-.log-line .ts { color: #484f58; }
-.log-line .msg { color: #c9d1d9; }
-.log-line.step-received .msg { color: #58a6ff; }
-.log-line.step-done .msg { color: #3fb950; }
-.log-line.step-failed .msg { color: #f85149; }
+.log { height: 280px; border-radius: var(--radius); padding: 16px; line-height: 1.6; }
+.log-line { color: var(--text-muted); }
+.log-line .ts { color: var(--text-faint); }
+.log-line .msg { color: var(--text-secondary); }
+.log-line.step-received .msg { color: var(--color-blue); }
+.log-line.step-done .msg { color: var(--color-green); }
+.log-line.step-failed .msg { color: var(--color-red); }
 
 /* 연결 상태 */
 .conn-status {
@@ -219,15 +218,9 @@ h2 { font-size: 1.1rem; margin-bottom: 12px; color: #8b949e; font-weight: 500; }
   align-items: center;
   gap: 6px;
   font-size: 0.75rem;
-  color: #8b949e;
+  color: var(--text-muted);
   margin-left: 12px;
 }
-.conn-dot {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: #f85149;
-}
-.conn-dot.connected { background: #3fb950; }
 
 /* 서비스 상태 */
 .service-status {
@@ -235,26 +228,17 @@ h2 { font-size: 1.1rem; margin-bottom: 12px; color: #8b949e; font-weight: 500; }
   gap: 12px;
   margin-bottom: 24px;
   padding: 12px 16px;
-  background: #161b22;
   border-radius: 10px;
-  border: 1px solid #30363d;
 }
 .svc {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 0.8rem;
-  color: #8b949e;
+  color: var(--text-muted);
 }
-.svc-dot {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: #484f58;
-}
-.svc-dot.ok { background: #3fb950; }
-.svc-dot.error { background: #f85149; }
-.svc-name { font-weight: 600; color: #c9d1d9; }
-.svc-detail { font-size: 0.7rem; color: #f85149; margin-left: 4px; }
+.svc-name { font-weight: 600; color: var(--text-secondary); }
+.svc-detail { font-size: 0.7rem; color: var(--color-red); margin-left: 4px; }
 
 /* 히스토리 행 클릭 */
 .history tr[data-eid] { cursor: pointer; }
@@ -271,9 +255,6 @@ h2 { font-size: 1.1rem; margin-bottom: 12px; color: #8b949e; font-weight: 500; }
 }
 .modal-overlay.open { display: flex; }
 .modal {
-  background: #161b22;
-  border: 1px solid #30363d;
-  border-radius: 12px;
   width: 90%;
   max-width: 700px;
   max-height: 85vh;
@@ -290,7 +271,7 @@ h2 { font-size: 1.1rem; margin-bottom: 12px; color: #8b949e; font-weight: 500; }
 .modal-close {
   background: none;
   border: none;
-  color: #8b949e;
+  color: var(--text-muted);
   font-size: 1.5rem;
   cursor: pointer;
   line-height: 1;
@@ -299,25 +280,25 @@ h2 { font-size: 1.1rem; margin-bottom: 12px; color: #8b949e; font-weight: 500; }
 .detail-section { margin-bottom: 16px; }
 .detail-section h4 {
   font-size: 0.85rem;
-  color: #8b949e;
+  color: var(--text-muted);
   margin-bottom: 6px;
   font-weight: 500;
 }
 .detail-section p, .detail-section pre {
   font-size: 0.85rem;
-  color: #c9d1d9;
+  color: var(--text-secondary);
   line-height: 1.5;
 }
 .detail-section pre {
-  background: #0d1117;
-  border: 1px solid #30363d;
-  border-radius: 8px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   padding: 12px;
   overflow-x: auto;
   white-space: pre-wrap;
   word-break: break-all;
   max-height: 200px;
   overflow-y: auto;
-  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  font-family: var(--font-mono);
   font-size: 0.8rem;
 }
