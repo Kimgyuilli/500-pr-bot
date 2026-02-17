@@ -127,6 +127,58 @@
   .history a:hover { text-decoration: underline; }
   .empty-msg { padding: 24px; text-align: center; color: #484f58; }
 
+  /* 테스트 실행 결과 */
+  .test-run-section {
+    display: none;
+    margin-bottom: 32px;
+    background: #161b22;
+    border-radius: 12px;
+    border: 1px solid #30363d;
+    padding: 16px;
+  }
+  .test-run-section.visible { display: block; }
+  .test-summary-bar {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 12px;
+    font-size: 0.85rem;
+  }
+  .test-summary-bar .count {
+    padding: 4px 12px;
+    border-radius: 8px;
+    font-weight: 600;
+  }
+  .count.total { background: #21262d; color: #c9d1d9; }
+  .count.pass { background: #1a2e1f; color: #3fb950; }
+  .count.fail { background: #2d1b1b; color: #f85149; }
+  .test-log {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 12px;
+    height: 200px;
+    overflow-y: auto;
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: #8b949e;
+    margin-bottom: 12px;
+  }
+  .test-results-table { width: 100%; border-collapse: collapse; }
+  .test-results-table th {
+    text-align: left;
+    padding: 8px 12px;
+    background: #21262d;
+    font-size: 0.8rem;
+    color: #8b949e;
+    font-weight: 500;
+  }
+  .test-results-table td {
+    padding: 8px 12px;
+    font-size: 0.82rem;
+    border-top: 1px solid #21262d;
+  }
+
   /* 실시간 로그 */
   .log-section { margin-top: 0; }
   .log {
@@ -265,6 +317,7 @@
 <div class="middle">
   <div class="test-section">
     <button class="test-btn" id="testBtn" onclick="sendTest()">테스트 에러 전송</button>
+    <button class="test-btn" id="runTestsBtn" onclick="runTests()" style="margin-left:8px;background:#1f6feb;">테스트 코드 실행</button>
   </div>
   <div class="history">
     <table>
@@ -274,6 +327,20 @@
       </tbody>
     </table>
   </div>
+</div>
+
+<div class="test-run-section" id="testRunSection">
+  <h2 style="margin-bottom:12px;">테스트 실행 결과</h2>
+  <div class="test-summary-bar" id="testSummaryBar">
+    <span class="count total" id="testTotal">전체: -</span>
+    <span class="count pass" id="testPass">통과: -</span>
+    <span class="count fail" id="testFail">실패: -</span>
+  </div>
+  <div class="test-log" id="testLogArea"></div>
+  <table class="test-results-table">
+    <thead><tr><th>파일</th><th>테스트명</th><th>결과</th></tr></thead>
+    <tbody id="testResultsBody"></tbody>
+  </table>
 </div>
 
 <h2>실시간 로그</h2>
@@ -455,6 +522,56 @@ async function sendTest() {
       btn.textContent = '테스트 에러 전송';
     }, 3000);
   }
+}
+
+// 테스트 코드 실행
+function runTests() {
+  const btn = document.getElementById('runTestsBtn');
+  btn.disabled = true;
+  btn.textContent = '실행 중...';
+
+  const section = document.getElementById('testRunSection');
+  const logArea = document.getElementById('testLogArea');
+  const tbody = document.getElementById('testResultsBody');
+  section.classList.add('visible');
+  logArea.innerHTML = '';
+  tbody.innerHTML = '';
+  document.getElementById('testTotal').textContent = '전체: -';
+  document.getElementById('testPass').textContent = '통과: -';
+  document.getElementById('testFail').textContent = '실패: -';
+
+  const es = new EventSource('/api/tests/stream');
+  es.onmessage = (e) => {
+    const ev = JSON.parse(e.data);
+    if (ev.type === 'log') {
+      const div = document.createElement('div');
+      div.textContent = ev.line;
+      logArea.appendChild(div);
+      logArea.scrollTop = logArea.scrollHeight;
+    } else if (ev.type === 'result') {
+      const cls = ev.status === 'passed' ? 'done' : 'failed';
+      const label = ev.status === 'passed' ? 'PASS' : ev.status.toUpperCase();
+      tbody.insertAdjacentHTML('beforeend',
+        `<tr><td>${esc(ev.file)}</td><td>${esc(ev.name)}</td><td><span class="badge ${cls}">${label}</span></td></tr>`);
+    } else if (ev.type === 'summary') {
+      document.getElementById('testTotal').textContent = '전체: ' + ev.total;
+      document.getElementById('testPass').textContent = '통과: ' + ev.passed;
+      document.getElementById('testFail').textContent = '실패: ' + (ev.failed + ev.error);
+      es.close();
+      btn.disabled = false;
+      btn.textContent = '테스트 코드 실행';
+    } else if (ev.type === 'error') {
+      logArea.insertAdjacentHTML('beforeend', `<div style="color:#f85149;">${esc(ev.message)}</div>`);
+      es.close();
+      btn.disabled = false;
+      btn.textContent = '테스트 코드 실행';
+    }
+  };
+  es.onerror = () => {
+    es.close();
+    btn.disabled = false;
+    btn.textContent = '테스트 코드 실행';
+  };
 }
 
 // 초기화

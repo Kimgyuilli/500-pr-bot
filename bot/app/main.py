@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 from app.error_handler import ErrorReport, process_error
 from fastapi.responses import JSONResponse
 from app.event_store import get_error, get_history, subscribe
+from app.test_runner import run_tests
 
 app = FastAPI(title="500 Error Auto-Fix Bot")
 
@@ -68,6 +69,17 @@ async def get_error_detail(error_id: str):
 @app.get("/api/errors")
 async def get_errors():
     return get_history()
+
+
+@app.get("/api/tests/stream")
+async def test_stream():
+    return EventSourceResponse(_test_sse_generator(), media_type="text/event-stream")
+
+
+async def _test_sse_generator():
+    import json
+    async for event in run_tests():
+        yield {"data": json.dumps(event, ensure_ascii=False)}
 
 
 @app.post("/api/test-webhook")
