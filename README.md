@@ -5,9 +5,10 @@ Spring Boot 앱에서 500 에러 발생 시 AI가 자동으로 코드를 분석/
 ```
 Spring Boot 500 에러 → POST /webhook/error → 봇
   → Discord 에러 알림
-  → GitHub 코드 조회 (스택트레이스 파일 + import 관련 파일)
-  → AI 분석/수정 (근본 원인 + 수정 내용 상세 분석)
-  → PR 생성 (에러 정보 테이블, 근본 원인, AI 분석, 수정 내용, 수정 파일 목록)
+  → GitHub 코드 조회 (스택트레이스 파일 + import 관련 파일 N-depth)
+  → AI 분석/수정 (파싱 실패 시 피드백 재시도)
+  → AI 응답 검증 (경로/내용 유효성)
+  → PR 생성 (에러 정보, 근본 원인, AI 분석, 수정 내용, 변경 diff)
   → Discord PR 알림
 ```
 
@@ -30,6 +31,7 @@ GITHUB_REPO=owner/repo             # 대상 레포지토리
 GITHUB_BASE_BRANCH=main            # PR의 base 브랜치
 BASE_PACKAGE=com.myapp             # 스택트레이스 필터링용 패키지명
 DISCORD_WEBHOOK_URL=https://...    # Discord Webhook URL
+IMPORT_DEPTH=1                     # import 탐색 깊이 (기본값 1)
 ```
 
 ### 2. 봇 실행
@@ -82,7 +84,7 @@ error-bot:
 │   │   │   └── stack_trace_parser.py  # 스택트레이스 파싱 + import 관련 파일 추출
 │   │   └── static/
 │   │       └── index.html             # 대시보드 UI (에러 봇 탭 + 테스트 실행 탭)
-│   ├── tests/                     # pytest 단위 테스트 (46개)
+│   ├── tests/                     # pytest 단위 테스트 (56개)
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   └── .env.example
@@ -106,12 +108,15 @@ error_handler.process_error(ErrorReport):
   2. discord_service.send_error_alert()       → Discord 에러 알림
   3. stack_trace_parser.parse_stack_trace()   → [{"file": "src/.../Foo.java", "class": "...", "line": 45}]
   4. github_service.fetch_files(file_paths)   → {"src/.../Foo.java": "소스코드..."}
-  5. stack_trace_parser.extract_related_imports() → import된 프로젝트 내부 파일 경로
-  6. github_service.fetch_files(related)      → 참고용 코드
-  7. ai_service.analyze_error(error_files, context_files)
+  5. import N-depth 탐색 루프 (settings.import_depth만큼 반복)
+     → extract_related_imports() + fetch_files() 반복
+  6. ai_service.analyze_error(error_files, context_files)
+     → 파싱 실패 시 피드백 프롬프트 포함 1회 재시도
      → {"analysis": "...", "root_cause": "...", "fix_description": "...", "files": [...], "summary": "..."}
-  8. github_service.create_pull_request()     → PR URL
-  9. discord_service.send_pr_alert()          → Discord PR 알림
+  7. _validate_ai_result()                    → 경로/내용 검증 (실패 시 중단 + 알림)
+  8. _build_diff()                            → 원본 vs 수정 unified diff 생성
+  9. github_service.create_pull_request()     → PR URL
+ 10. discord_service.send_pr_alert()          → Discord PR 알림
 
 각 단계에서 event_store.emit()으로 대시보드에 실시간 상태 전송
 ```
@@ -173,6 +178,7 @@ SSE로 서버 이벤트를 실시간 수신하며, 연결 상태 표시기가 �
 | Spring Boot 외 프레임워크 | `stack_trace_parser.py` | `parse_stack_trace()`의 정규식을 대상 언어의 스택트레이스 형식에 맞게 변경. 반환 형식 `[{"file": "경로", "class": "...", "line": N}]` 유지 |
 | PR 본문 형식 변경 | `error_handler.py` | `PR_BODY_TEMPLATE` 수정 |
 | 중복 필터 시간 변경 | `error_handler.py` | `DEDUP_TTL` 값 변경 (기본 1800초 = 30분) |
+| import 탐색 깊이 변경 | `bot/.env` | `IMPORT_DEPTH=2` 등으로 설정 (기본 1) |
 
 **핵심 원칙**: 각 모듈의 함수 시그니처와 반환 형식만 유지하면, 내부 구현은 자유롭게 교체 가능.
 
@@ -180,10 +186,12 @@ SSE로 서버 이벤트를 실시간 수신하며, 연결 상태 표시기가 �
 
 ## AI 분석 흐름
 
-1. **파일 분리 수집**: 스택트레이스에 등장한 파일(`error_files`)과 import로 연결된 참고 파일(`context_files`)을 구분하여 조회
+1. **파일 분리 수집**: 스택트레이스에 등장한 파일(`error_files`)과 import로 연결된 참고 파일(`context_files`)을 구분하여 조회. import 탐색 깊이는 `IMPORT_DEPTH` 환경변수로 설정 (기본 1)
 2. **구조화된 프롬프트**: 에러 파일과 참고 파일을 분리된 섹션으로 AI에 전달 → AI가 에러 발생 지점과 참고 맥락을 혼동하지 않음
-3. **상세 응답**: AI가 `root_cause`(근본 원인), `fix_description`(수정 내용 상세), `analysis`(분석), `files`(수정 코드)를 반환
-4. **리뷰어 친화적 PR**: 에러 정보 테이블 + 근본 원인 + AI 분석 + 수정 내용 + 수정 파일 목록으로 구성된 PR 본문 자동 생성
+3. **피드백 재시도**: AI 응답이 유효한 JSON이 아니면 피드백 프롬프트를 붙여 1회 재시도
+4. **응답 검증**: AI가 반환한 파일 경로가 실제 조회한 파일에 포함되는지, 내용이 비어있지 않은지 검증. 실패 시 PR 생성을 중단하고 Discord 알림
+5. **상세 응답**: AI가 `root_cause`(근본 원인), `fix_description`(수정 내용 상세), `analysis`(분석), `files`(수정 코드)를 반환
+6. **리뷰어 친화적 PR**: 에러 정보 테이블 + 근본 원인 + AI 분석 + 수정 내용 + 수정 파일 목록 + **변경 diff**로 구성된 PR 본문 자동 생성
 
 ---
 
@@ -193,7 +201,7 @@ SSE로 서버 이벤트를 실시간 수신하며, 연결 상태 표시기가 �
 docker compose run --rm bot python -m pytest tests/ -v
 ```
 
-46개 단위 테스트: AI 서비스, Discord 알림, 에러 처리 파이프라인, 이벤트 저장소, GitHub 서비스, API 엔드포인트, 스택트레이스 파서, 테스트 러너 파서.
+56개 단위 테스트: AI 서비스 (재시도 포함), Discord 알림, 에러 처리 파이프라인 (검증/diff 포함), 이벤트 저장소, GitHub 서비스, API 엔드포인트, 스택트레이스 파서, 테스트 러너 파서.
 
 ---
 
