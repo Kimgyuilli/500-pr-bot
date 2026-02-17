@@ -1,5 +1,6 @@
 import json
 import logging
+from typing import Protocol
 
 from openai import OpenAI
 from tenacity import retry, retry_if_not_exception_type, stop_after_attempt, wait_fixed
@@ -8,14 +9,56 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-_client = None
+
+class AIProvider(Protocol):
+    """AI API 호출 후 텍스트 응답 반환."""
+
+    def call(self, system_prompt: str, user_prompt: str) -> str: ...
 
 
-def _get_client():
-    global _client
-    if _client is None:
-        _client = OpenAI(api_key=settings.openai_api_key)
-    return _client
+class OpenAIProvider:
+    def __init__(self):
+        self._client = None
+
+    def _get_client(self):
+        if self._client is None:
+            self._client = OpenAI(api_key=settings.openai_api_key)
+        return self._client
+
+    @retry(
+        stop=stop_after_attempt(2),
+        wait=wait_fixed(2),
+        reraise=True,
+    )
+    def call(self, system_prompt: str, user_prompt: str) -> str:
+        response = self._get_client().chat.completions.create(
+            model="gpt-4o-mini",
+            max_tokens=4096,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+        return response.choices[0].message.content
+
+
+_provider: AIProvider | None = None
+
+_PROVIDERS: dict[str, type] = {
+    "openai": OpenAIProvider,
+}
+
+
+def _get_provider() -> AIProvider:
+    global _provider
+    if _provider is None:
+        name = settings.ai_provider
+        cls = _PROVIDERS.get(name)
+        if cls is None:
+            raise ValueError(f"알 수 없는 AI provider: {name!r} (지원: {list(_PROVIDERS)})")
+        _provider = cls()
+    return _provider
+
 
 SYSTEM_PROMPT = """\
 너는 Spring Boot 코드를 분석하고 수정하는 봇이다.
@@ -56,26 +99,6 @@ def _build_source_section(
     return "\n\n".join(parts)
 
 
-@retry(
-    stop=stop_after_attempt(2),
-    wait=wait_fixed(2),
-    retry=retry_if_not_exception_type((json.JSONDecodeError, IndexError, KeyError)),
-    reraise=True,
-)
-def _call_openai(user_prompt: str) -> dict:
-    """OpenAI API 호출 + JSON 파싱. 네트워크 오류만 재시도."""
-    response = _get_client().chat.completions.create(
-        model="gpt-4o-mini",
-        max_tokens=4096,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
-        ],
-    )
-    text = response.choices[0].message.content
-    return json.loads(text)
-
-
 def analyze_error(
     error_type: str,
     error_message: str,
@@ -83,7 +106,7 @@ def analyze_error(
     error_files: dict[str, str],
     context_files: dict[str, str] | None = None,
 ) -> dict | None:
-    """OpenAI API로 에러를 분석하고 수정안을 반환한다. 실패 시 None."""
+    """AI API로 에러를 분석하고 수정안을 반환한다. 실패 시 None."""
     user_prompt = USER_PROMPT_TEMPLATE.format(
         error_type=error_type,
         error_message=error_message,
@@ -91,13 +114,16 @@ def analyze_error(
         source_code_section=_build_source_section(error_files, context_files or {}),
     )
 
+    provider = _get_provider()
+
     # 1차 시도
     try:
-        return _call_openai(user_prompt)
+        text = provider.call(SYSTEM_PROMPT, user_prompt)
+        return json.loads(text)
     except (json.JSONDecodeError, IndexError, KeyError) as e:
         logger.warning("1차 AI 응답 파싱 실패, 재시도: %s", e)
     except Exception:
-        logger.exception("OpenAI API 호출 실패")
+        logger.exception("AI API 호출 실패")
         return None
 
     # 2차 시도: 피드백 포함
@@ -108,10 +134,11 @@ def analyze_error(
         "JSON 외의 텍스트를 절대 포함하지 마라."
     )
     try:
-        return _call_openai(retry_prompt)
+        text = provider.call(SYSTEM_PROMPT, retry_prompt)
+        return json.loads(text)
     except (json.JSONDecodeError, IndexError, KeyError) as e:
         logger.error("2차 AI 응답 파싱도 실패: %s", e)
         return None
     except Exception:
-        logger.exception("OpenAI API 재시도 호출 실패")
+        logger.exception("AI API 재시도 호출 실패")
         return None

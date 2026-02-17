@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     discord_webhook_url: str
     bot_port: int = 8000
     import_depth: int = 1
+    ai_provider: str = "openai"
 
     model_config = {"env_file": ".env"}
 

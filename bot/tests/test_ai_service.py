@@ -1,20 +1,16 @@
 import json
 from unittest.mock import MagicMock, patch
 
-from app.services.ai_service import analyze_error
+import pytest
+
+from app.services.ai_service import OpenAIProvider, _PROVIDERS, analyze_error
 
 
-def _make_mock_client(content: str):
-    """OpenAI 응답 mock 생성 헬퍼."""
-    message = MagicMock()
-    message.content = content
-    choice = MagicMock()
-    choice.message = message
-    response = MagicMock()
-    response.choices = [choice]
-    client = MagicMock()
-    client.chat.completions.create.return_value = response
-    return client
+def _make_mock_provider(content: str):
+    """AIProvider mock 생성 헬퍼."""
+    provider = MagicMock()
+    provider.call.return_value = content
+    return provider
 
 
 def test_analyze_error_returns_parsed_response():
@@ -25,9 +21,9 @@ def test_analyze_error_returns_parsed_response():
         "files": [],
         "summary": "수정",
     }
-    client = _make_mock_client(json.dumps(expected))
+    provider = _make_mock_provider(json.dumps(expected))
 
-    with patch("app.services.ai_service._get_client", return_value=client):
+    with patch("app.services.ai_service._get_provider", return_value=provider):
         result = analyze_error(
             "NPE", "msg", "trace",
             error_files={"a.java": "code"},
@@ -39,14 +35,14 @@ def test_analyze_error_returns_parsed_response():
 
 def test_analyze_error_returns_none_on_invalid_json():
     """1차, 2차 모두 invalid JSON이면 None."""
-    client = _make_mock_client("not json")
+    provider = _make_mock_provider("not json")
 
-    with patch("app.services.ai_service._get_client", return_value=client):
+    with patch("app.services.ai_service._get_provider", return_value=provider):
         result = analyze_error("NPE", "msg", "trace", error_files={"a.java": "code"})
 
     assert result is None
     # 1차 + 2차 = 2번 호출
-    assert client.chat.completions.create.call_count == 2
+    assert provider.call.call_count == 2
 
 
 def test_analyze_error_retry_succeeds_on_second_attempt():
@@ -58,32 +54,47 @@ def test_analyze_error_retry_succeeds_on_second_attempt():
         "files": [],
         "summary": "요약",
     }
-    # 1차: invalid, 2차: valid
-    first_client = _make_mock_client("not json")
-    second_client = _make_mock_client(json.dumps(expected))
+    provider = MagicMock()
+    provider.call.side_effect = ["not json", json.dumps(expected)]
 
-    call_count = {"n": 0}
-    original_get_client = None
-
-    def _switching_client():
-        call_count["n"] += 1
-        if call_count["n"] <= 1:
-            return first_client
-        return second_client
-
-    with patch("app.services.ai_service._get_client", side_effect=_switching_client):
+    with patch("app.services.ai_service._get_provider", return_value=provider):
         result = analyze_error("NPE", "msg", "trace", error_files={"a.java": "code"})
 
     assert result == expected
 
 
 def test_analyze_error_returns_none_on_api_exception():
-    client = MagicMock()
-    client.chat.completions.create.side_effect = RuntimeError("API down")
+    provider = MagicMock()
+    provider.call.side_effect = RuntimeError("API down")
 
-    with patch("app.services.ai_service._get_client", return_value=client):
+    with patch("app.services.ai_service._get_provider", return_value=provider):
         result = analyze_error("NPE", "msg", "trace", error_files={"a.java": "code"})
 
     assert result is None
-    # tenacity retry(2회)로 2번 호출됨
-    assert client.chat.completions.create.call_count == 2
+    # 1차 실패 → 바로 None (네트워크 에러는 재시도 안 함)
+    assert provider.call.call_count == 1
+
+
+def test_get_provider_returns_openai_by_default():
+    """ai_provider=openai일 때 OpenAIProvider 반환."""
+    with patch("app.services.ai_service._provider", None), \
+         patch("app.services.ai_service.settings") as mock_settings:
+        mock_settings.ai_provider = "openai"
+        from app.services.ai_service import _get_provider
+        provider = _get_provider()
+        assert isinstance(provider, OpenAIProvider)
+
+
+def test_get_provider_raises_on_unknown():
+    """알 수 없는 provider 이름이면 ValueError."""
+    with patch("app.services.ai_service._provider", None), \
+         patch("app.services.ai_service.settings") as mock_settings:
+        mock_settings.ai_provider = "unknown"
+        from app.services.ai_service import _get_provider
+        with pytest.raises(ValueError, match="알 수 없는 AI provider"):
+            _get_provider()
+
+
+def test_providers_registry_contains_openai():
+    assert "openai" in _PROVIDERS
+    assert _PROVIDERS["openai"] is OpenAIProvider
