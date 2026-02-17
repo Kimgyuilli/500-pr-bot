@@ -5,7 +5,7 @@ from typing import AsyncGenerator
 _running = False
 
 _RESULT_RE = re.compile(
-    r"^(tests/\S+\.py)::(\S+)\s+(PASSED|FAILED|ERROR)",
+    r"^(tests/\S+\.py)::(.+)\s(PASSED|FAILED|ERROR)",
 )
 
 

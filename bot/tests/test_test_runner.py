@@ -30,3 +30,8 @@ class TestParseTestLine:
         line = "tests/unit/test_parser.py::test_parse PASSED"
         result = _parse_test_line(line)
         assert result == {"file": "tests/unit/test_parser.py", "name": "test_parse", "status": "passed"}
+
+    def test_korean_name(self):
+        line = "tests/test_main.py::API - 헬스체크 정상 응답 PASSED"
+        result = _parse_test_line(line)
+        assert result == {"file": "tests/test_main.py", "name": "API - 헬스체크 정상 응답", "status": "passed"}
