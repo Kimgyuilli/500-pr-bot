@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -71,16 +72,17 @@ async def get_errors():
 
 @app.post("/api/test-webhook")
 async def test_webhook():
+    now = datetime.now(timezone.utc)
     sample = ErrorReport(
         errorType="NullPointerException",
-        errorMessage="Cannot invoke method on null object",
+        errorMessage=f"Cannot invoke method on null object (test-{now.strftime('%H%M%S')})",
         stackTrace=(
             "at com.myapp.service.UserService.getUser(UserService.java:45)\n"
             "at com.myapp.controller.UserController.show(UserController.java:30)\n"
             "at org.springframework.web.servlet.FrameworkServlet.service(FrameworkServlet.java:97)"
         ),
         requestUrl="GET /api/users/1",
-        timestamp="2026-02-17T12:00:00Z",
+        timestamp=now.isoformat(),
     )
     task = asyncio.create_task(process_error(sample))
     task.add_done_callback(_log_task_exception)
