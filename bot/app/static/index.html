@@ -8,12 +8,12 @@
 </head>
 <body>
 
-<h1>500 Error Bot <span class="conn-status"><span class="conn-dot" id="connDot"></span><span id="connText">연결 중...</span></span></h1>
+<h1>500 Error Bot <span class="conn-status"><span class="status-dot" id="connDot"></span><span id="connText">연결 중...</span></span></h1>
 
-<div class="service-status" id="serviceStatus">
-  <div class="svc" id="svc-openai"><span class="svc-dot"></span><span class="svc-name">OpenAI</span></div>
-  <div class="svc" id="svc-github"><span class="svc-dot"></span><span class="svc-name">GitHub</span></div>
-  <div class="svc" id="svc-discord"><span class="svc-dot"></span><span class="svc-name">Discord</span></div>
+<div class="service-status card" id="serviceStatus">
+  <div class="svc" id="svc-openai"><span class="status-dot"></span><span class="svc-name">OpenAI</span></div>
+  <div class="svc" id="svc-github"><span class="status-dot"></span><span class="svc-name">GitHub</span></div>
+  <div class="svc" id="svc-discord"><span class="status-dot"></span><span class="svc-name">Discord</span></div>
 </div>
 
 <div class="tabs">
@@ -24,7 +24,7 @@
 <!-- 에러 봇 탭 -->
 <div class="tab-panel active" id="tab-error">
   <h2>파이프라인</h2>
-  <div class="pipeline" id="pipeline">
+  <div class="pipeline card" id="pipeline">
     <div class="step" data-step="received">
       <div class="step-name">에러 수신</div>
       <div class="step-status">대기</div>
@@ -55,8 +55,8 @@
     <div class="test-section">
       <button class="test-btn" id="testBtn" onclick="sendTest()">테스트 에러 전송</button>
     </div>
-    <div class="history">
-      <table>
+    <div class="history card">
+      <table class="data-table">
         <thead><tr><th>시간</th><th>에러 타입</th><th>메시지</th><th>상태</th><th>PR</th></tr></thead>
         <tbody id="historyBody">
           <tr><td colspan="5" class="empty-msg">에러 기록이 없습니다</td></tr>
@@ -66,7 +66,7 @@
   </div>
 
   <h2>실시간 로그</h2>
-  <div class="log" id="logArea"></div>
+  <div class="log-area log" id="logArea"></div>
 </div>
 
 <!-- 테스트 실행 탭 -->
@@ -75,14 +75,14 @@
     <button class="test-btn" id="runTestsBtn" onclick="runTests()" style="background:#1f6feb;">테스트 코드 실행</button>
   </div>
 
-  <div class="test-run-section" id="testRunSection">
+  <div class="test-run-section card" id="testRunSection">
     <div class="test-summary-bar" id="testSummaryBar">
       <span class="count total" id="testTotal">전체: -</span>
       <span class="count pass" id="testPass">통과: -</span>
       <span class="count fail" id="testFail">실패: -</span>
     </div>
-    <div class="test-log" id="testLogArea"></div>
-    <table class="test-results-table">
+    <div class="log-area test-log" id="testLogArea"></div>
+    <table class="data-table">
       <thead><tr><th>파일</th><th>테스트명</th><th>결과</th></tr></thead>
       <tbody id="testResultsBody"></tbody>
     </table>
@@ -90,7 +90,7 @@
 </div>
 
 <div class="modal-overlay" id="modalOverlay">
-  <div class="modal">
+  <div class="modal card">
     <div class="modal-header">
       <h3 id="modalTitle">에러 상세</h3>
       <button class="modal-close" onclick="closeModal()">&times;</button>
