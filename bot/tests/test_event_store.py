@@ -5,6 +5,7 @@ from app.event_store import (
     _error_history,
     _subscribers,
     emit,
+    get_error,
     get_history,
     make_event,
     subscribe,
@@ -78,3 +79,43 @@ async def test_get_history_returns_newest_first():
     history = get_history()
     assert history[0]["error_id"] == "b"
     assert history[1]["error_id"] == "a"
+
+
+async def test_data_merge_across_events():
+    _clear()
+    await emit(make_event("abc", "received", "수신", data={"errorType": "NPE", "errorMessage": "null"}))
+    await emit(make_event("abc", "done", "완료", data={"pr_url": "https://github.com/pr/1", "root_cause": "null check 누락"}))
+
+    history = get_history()
+    assert len(history) == 1
+    data = history[0]["data"]
+    # received 데이터 유지
+    assert data["errorType"] == "NPE"
+    assert data["errorMessage"] == "null"
+    # done 데이터 merge
+    assert data["pr_url"] == "https://github.com/pr/1"
+    assert data["root_cause"] == "null check 누락"
+
+
+async def test_data_not_overwritten_when_none():
+    _clear()
+    await emit(make_event("abc", "received", "수신", data={"errorType": "NPE"}))
+    await emit(make_event("abc", "parsing", "파싱 중"))  # data=None
+
+    history = get_history()
+    assert history[0]["data"]["errorType"] == "NPE"
+
+
+async def test_get_error_found():
+    _clear()
+    await emit(make_event("abc", "received", "수신", data={"errorType": "NPE"}))
+
+    result = get_error("abc")
+    assert result is not None
+    assert result["error_id"] == "abc"
+    assert result["data"]["errorType"] == "NPE"
+
+
+async def test_get_error_not_found():
+    _clear()
+    assert get_error("nonexistent") is None

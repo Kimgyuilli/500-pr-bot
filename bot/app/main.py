@@ -11,7 +11,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 from app.error_handler import ErrorReport, process_error
-from app.event_store import get_history, subscribe
+from fastapi.responses import JSONResponse
+from app.event_store import get_error, get_history, subscribe
 
 app = FastAPI(title="500 Error Auto-Fix Bot")
 
@@ -53,6 +54,14 @@ async def _sse_generator():
     import json
     async for event in subscribe():
         yield {"data": json.dumps(event, ensure_ascii=False)}
+
+
+@app.get("/api/errors/{error_id}")
+async def get_error_detail(error_id: str):
+    error = get_error(error_id)
+    if not error:
+        return JSONResponse(status_code=404, content={"detail": "에러를 찾을 수 없습니다"})
+    return error
 
 
 @app.get("/api/errors")

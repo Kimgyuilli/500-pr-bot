@@ -31,7 +31,10 @@ async def emit(event: PipelineEvent) -> None:
             item["step"] = event.step
             item["message"] = event.message
             item["timestamp"] = event.timestamp
-            item["data"] = event.data
+            if event.data:
+                if not item.get("data"):
+                    item["data"] = {}
+                item["data"].update(event.data)
             break
     else:
         _error_history.append(dict(payload))
@@ -50,6 +53,14 @@ async def emit(event: PipelineEvent) -> None:
 def get_history() -> list[dict]:
     """최근 에러 목록 반환 (최신 순)."""
     return list(reversed(_error_history))
+
+
+def get_error(error_id: str) -> dict | None:
+    """특정 에러의 상세 정보 반환."""
+    for item in _error_history:
+        if item["error_id"] == error_id:
+            return item
+    return None
 
 
 async def subscribe() -> AsyncGenerator[dict, None]:

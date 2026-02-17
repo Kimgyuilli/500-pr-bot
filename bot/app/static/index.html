@@ -162,6 +162,72 @@
     background: #f85149;
   }
   .conn-dot.connected { background: #3fb950; }
+
+  /* 히스토리 행 클릭 */
+  .history tr[data-eid] { cursor: pointer; }
+
+  /* 모달 */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 700px;
+    max-height: 85vh;
+    overflow-y: auto;
+    padding: 24px;
+  }
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .modal-header h3 { font-size: 1.1rem; color: #fff; }
+  .modal-close {
+    background: none;
+    border: none;
+    color: #8b949e;
+    font-size: 1.5rem;
+    cursor: pointer;
+    line-height: 1;
+  }
+  .modal-close:hover { color: #fff; }
+  .detail-section { margin-bottom: 16px; }
+  .detail-section h4 {
+    font-size: 0.85rem;
+    color: #8b949e;
+    margin-bottom: 6px;
+    font-weight: 500;
+  }
+  .detail-section p, .detail-section pre {
+    font-size: 0.85rem;
+    color: #c9d1d9;
+    line-height: 1.5;
+  }
+  .detail-section pre {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 12px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 200px;
+    overflow-y: auto;
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.8rem;
+  }
 </style>
 </head>
 <body>
@@ -202,9 +268,9 @@
   </div>
   <div class="history">
     <table>
-      <thead><tr><th>시간</th><th>에러 타입</th><th>상태</th><th>링크</th></tr></thead>
+      <thead><tr><th>시간</th><th>에러 타입</th><th>메시지</th><th>상태</th><th>PR</th></tr></thead>
       <tbody id="historyBody">
-        <tr><td colspan="4" class="empty-msg">에러 기록이 없습니다</td></tr>
+        <tr><td colspan="5" class="empty-msg">에러 기록이 없습니다</td></tr>
       </tbody>
     </table>
   </div>
@@ -212,6 +278,16 @@
 
 <h2>실시간 로그</h2>
 <div class="log" id="logArea"></div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modalTitle">에러 상세</h3>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+    <div id="modalBody"></div>
+  </div>
+</div>
 
 <script>
 const STEPS = ['received', 'parsing', 'fetching', 'analyzing', 'creating_pr'];
@@ -262,23 +338,68 @@ function updatePipeline(event) {
 function renderHistory(errors) {
   const tbody = document.getElementById('historyBody');
   if (!errors.length) {
-    tbody.innerHTML = '<tr><td colspan="4" class="empty-msg">에러 기록이 없습니다</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="empty-msg">에러 기록이 없습니다</td></tr>';
     return;
   }
   tbody.innerHTML = errors.map(e => {
     const time = new Date(e.timestamp).toLocaleString('ko-KR', { hour12: false });
     const badgeClass = e.step === 'done' ? 'done' : e.step === 'failed' ? 'failed' : 'active';
     const statusText = STEP_LABELS[e.step] || e.step;
-    const link = e.data && e.data.pr_url
-      ? `<a href="${e.data.pr_url}" target="_blank">PR 보기</a>`
+    const d = e.data || {};
+    const errorType = d.errorType || e.error_id || '-';
+    const errorMsg = d.errorMessage ? (d.errorMessage.length > 40 ? d.errorMessage.slice(0, 40) + '...' : d.errorMessage) : '-';
+    const link = d.pr_url
+      ? `<a href="${d.pr_url}" target="_blank" onclick="event.stopPropagation()">PR 보기</a>`
       : '-';
-    return `<tr>
+    return `<tr data-eid="${e.error_id}" onclick="openModal('${e.error_id}')">
       <td>${time}</td>
-      <td>${e.error_id || '-'}</td>
+      <td>${errorType}</td>
+      <td>${errorMsg}</td>
       <td><span class="badge ${badgeClass}">${statusText}</span></td>
       <td>${link}</td>
     </tr>`;
   }).join('');
+}
+
+// 모달
+function openModal(errorId) {
+  fetch('/api/errors/' + errorId)
+    .then(r => { if (!r.ok) throw new Error('not found'); return r.json(); })
+    .then(e => {
+      const d = e.data || {};
+      document.getElementById('modalTitle').textContent = d.errorType || e.error_id;
+      let html = '';
+      if (d.errorMessage) html += section('메시지', `<p>${esc(d.errorMessage)}</p>`);
+      if (d.requestUrl) html += section('요청 URL', `<p>${esc(d.requestUrl)}</p>`);
+      if (d.stackTrace) html += section('스택트레이스', `<pre>${esc(d.stackTrace)}</pre>`);
+      if (d.root_cause) html += section('근본 원인', `<p>${esc(d.root_cause)}</p>`);
+      if (d.analysis) html += section('AI 분석', `<p>${esc(d.analysis)}</p>`);
+      if (d.fix_description) html += section('수정 내용', `<p>${esc(d.fix_description)}</p>`);
+      if (d.pr_url) html += section('PR', `<p><a href="${d.pr_url}" target="_blank">${d.pr_url}</a></p>`);
+      if (!html) html = '<p style="color:#8b949e;">상세 정보가 없습니다.</p>';
+      document.getElementById('modalBody').innerHTML = html;
+      document.getElementById('modalOverlay').classList.add('open');
+    })
+    .catch(() => {});
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('open');
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+document.getElementById('modalOverlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeModal();
+});
+
+function section(title, content) {
+  return `<div class="detail-section"><h4>${title}</h4>${content}</div>`;
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
 }
 
 // 로그 추가

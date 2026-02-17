@@ -102,7 +102,13 @@ async def process_error(report: ErrorReport) -> None:
             logger.info("중복 에러 무시: %s", report.errorType)
             return
 
-        await emit(make_event(error_id, "received", f"{report.errorType} 수신"))
+        await emit(make_event(error_id, "received", f"{report.errorType} 수신", data={
+            "errorType": report.errorType,
+            "errorMessage": report.errorMessage,
+            "stackTrace": report.stackTrace,
+            "requestUrl": report.requestUrl,
+            "errorTimestamp": report.timestamp,
+        }))
         await send_error_alert(report)
 
         # 1. 스택트레이스 파싱
@@ -188,7 +194,13 @@ async def process_error(report: ErrorReport) -> None:
             return
 
         logger.info("PR 생성 완료: %s", pr_url)
-        await emit(make_event(error_id, "done", f"PR 생성 완료: {pr_url}", data={"pr_url": pr_url}))
+        await emit(make_event(error_id, "done", f"PR 생성 완료: {pr_url}", data={
+            "pr_url": pr_url,
+            "analysis": result.get("analysis", ""),
+            "root_cause": result.get("root_cause", ""),
+            "fix_description": result.get("fix_description", ""),
+            "summary": result.get("summary", ""),
+        }))
 
         # 7. Discord PR 완료 알림
         await send_pr_alert(pr_url, summary)
