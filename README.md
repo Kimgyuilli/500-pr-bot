@@ -81,16 +81,23 @@ error-bot:
 500-pr-bot/
 ├── bot/
 │   ├── app/
-│   │   ├── main.py                # FastAPI 엔트리포인트 + API 라우터
+│   │   ├── main.py                # FastAPI 앱 생성 + 라우터 등록
 │   │   ├── config.py              # 환경 변수 설정 (Pydantic Settings)
-│   │   ├── error_handler.py       # 에러 처리 오케스트레이션 (핵심 파이프라인)
+│   │   ├── schemas.py             # 요청/응답 모델 (ErrorReport)
+│   │   ├── pipeline.py            # 에러 처리 오케스트레이션 (핵심 파이프라인)
 │   │   ├── event_store.py         # SSE 이벤트 저장 + 브로드캐스트
-│   │   ├── test_runner.py         # pytest 서브프로세스 실행 + 결과 파싱
+│   │   ├── routers/
+│   │   │   ├── health.py              # GET /health
+│   │   │   ├── webhook.py             # POST /webhook/error, /api/test-webhook
+│   │   │   ├── errors.py              # GET /api/errors, /api/errors/{id}, /api/events
+│   │   │   └── admin.py               # GET/PUT /api/source-mode, GET /api/tests/stream
 │   │   ├── services/
 │   │   │   ├── ai_provider.py         # AIProvider Protocol + 구현체 + 팩토리
-│   │   │   ├── ai_service.py          # AI 프롬프트 구성 + 에러 분석 로직
+│   │   │   ├── ai_service.py          # AI 프롬프트 구성 + 에러 분석/검증 로직
 │   │   │   ├── discord_service.py     # Discord Webhook 알림
-│   │   │   └── github_service.py      # GitHub API (코드 조회, PR 생성)
+│   │   │   ├── github_service.py      # GitHub API (코드 조회, PR 생성)
+│   │   │   ├── pr_builder.py          # PR 본문 + diff 생성
+│   │   │   └── test_runner.py         # pytest 서브프로세스 실행 + 결과 파싱
 │   │   ├── utils/
 │   │   │   └── stack_trace_parser.py  # 스택트레이스 파싱 + import 관련 파일 추출
 │   │   └── static/
@@ -110,13 +117,14 @@ error-bot:
 ## 모듈 의존 관계 및 데이터 흐름
 
 ```
-main.py
-  ├── POST /webhook/error  →  error_handler.process_error()
-  ├── GET  /api/events     →  event_store.subscribe()        → SSE 스트림
-  ├── GET  /api/errors     →  event_store.get_history()
-  └── GET  /api/tests/stream → test_runner.run_tests()       → SSE 스트림
+main.py → 라우터 등록
+  routers/webhook.py   : POST /webhook/error  →  pipeline.process_error()
+  routers/errors.py    : GET  /api/events     →  event_store.subscribe()       → SSE 스트림
+                         GET  /api/errors     →  event_store.get_history()
+  routers/admin.py     : GET  /api/tests/stream → test_runner.run_tests()      → SSE 스트림
+  routers/health.py    : GET  /health         →  각 서비스 health_check()
 
-error_handler.process_error(ErrorReport):
+pipeline.process_error(ErrorReport):
   1. _is_duplicate()                          → 중복이면 무시
   2. discord_service.send_error_alert()       → Discord 에러 알림
   3. stack_trace_parser.parse_stack_trace()   → [{"file": "src/.../Foo.java", "class": "...", "line": 45}]
@@ -126,8 +134,8 @@ error_handler.process_error(ErrorReport):
   6. ai_service.analyze_error(error_files, context_files)
      → 파싱 실패 시 피드백 프롬프트 포함 1회 재시도
      → {"analysis": "...", "root_cause": "...", "fix_description": "...", "files": [...], "summary": "..."}
-  7. _validate_ai_result()                    → 경로/내용 검증 (실패 시 중단 + 알림)
-  8. _build_diff()                            → 원본 vs 수정 unified diff 생성
+  7. ai_service.validate_ai_result()          → 경로/내용 검증 (실패 시 중단 + 알림)
+  8. pr_builder.build_pr_body()               → PR 본문 생성 (에러 정보 + diff)
   9. github_service.create_pull_request()     → PR URL
  10. discord_service.send_pr_alert()          → Discord PR 알림
 
@@ -193,8 +201,8 @@ SSE로 서버 이벤트를 실시간 수신하며, 연결 상태 표시기가 �
 | AI 제공자 변경 | `bot/.env` | `AI_PROVIDER=openai` 등으로 설정 |
 | 알림 채널 교체 (Slack 등) | `discord_service.py` | `_post_webhook()`과 embed 구성을 대상 서비스 API에 맞게 변경. 함수 시그니처 `send_error_alert(report)`, `send_pr_alert(url, summary)`, `send_failure_alert(report, reason)` 유지 |
 | Spring Boot 외 프레임워크 | `stack_trace_parser.py` | `parse_stack_trace()`의 정규식을 대상 언어의 스택트레이스 형식에 맞게 변경. 반환 형식 `[{"file": "경로", "class": "...", "line": N}]` 유지 |
-| PR 본문 형식 변경 | `error_handler.py` | `PR_BODY_TEMPLATE` 수정 |
-| 중복 필터 시간 변경 | `error_handler.py` | `DEDUP_TTL` 값 변경 (기본 1800초 = 30분) |
+| PR 본문 형식 변경 | `pr_builder.py` | `PR_BODY_TEMPLATE` 수정 |
+| 중복 필터 시간 변경 | `pipeline.py` | `DEDUP_TTL` 값 변경 (기본 1800초 = 30분) |
 | import 탐색 깊이 변경 | `bot/.env` | `IMPORT_DEPTH=2` 등으로 설정 (기본 1) |
 | 소스 조회를 로컬 파일로 변경 | `bot/.env`, `docker-compose.yml` | `SOURCE_MODE=local`, `LOCAL_SOURCE_PATH=/workspace/source` + 볼륨 마운트 |
 
