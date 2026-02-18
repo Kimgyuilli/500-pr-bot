@@ -1,18 +1,17 @@
 import asyncio
-import difflib
 import hashlib
 import logging
 import time
 from datetime import datetime, timezone
 from functools import partial
 
-from pydantic import BaseModel
-
-from app.services.ai_service import analyze_error
+from app.schemas import ErrorReport
+from app.services.ai_service import analyze_error, validate_ai_result
 from app.config import settings
 from app.event_store import emit, make_event
 from app.services.discord_service import send_error_alert, send_failure_alert, send_pr_alert
 from app.services.github_service import create_pull_request, fetch_files
+from app.services.pr_builder import build_pr_body
 from app.utils.stack_trace_parser import extract_related_imports, parse_stack_trace
 
 logger = logging.getLogger(__name__)
@@ -36,96 +35,6 @@ def _is_duplicate(report: "ErrorReport") -> bool:
         return True
     _recent_errors[key] = now
     return False
-
-
-class ErrorReport(BaseModel):
-    errorType: str
-    errorMessage: str
-    stackTrace: str
-    requestUrl: str
-    timestamp: str
-
-
-def _validate_ai_result(result: dict, known_files: set[str]) -> str | None:
-    """AI 응답 검증. 문제 있으면 사유 문자열, 정상이면 None."""
-    files = result.get("files")
-    if not files:
-        return "수정 파일이 없음"
-    for f in files:
-        if "path" not in f or "content" not in f:
-            return "파일 항목에 path 또는 content 누락"
-        if f["path"] not in known_files:
-            return f"알 수 없는 파일 경로: {f['path']}"
-        if not f["content"].strip():
-            return f"빈 파일 내용: {f['path']}"
-    return None
-
-
-def _build_diff(original_files: dict[str, str], modified_files: list[dict]) -> str:
-    parts = []
-    for f in modified_files:
-        original = original_files.get(f["path"], "")
-        diff = difflib.unified_diff(
-            original.splitlines(keepends=True),
-            f["content"].splitlines(keepends=True),
-            fromfile=f"a/{f['path']}", tofile=f"b/{f['path']}",
-        )
-        diff_text = "".join(diff)
-        if diff_text:
-            parts.append(f"#### {f['path']}\n```diff\n{diff_text}```")
-    return "\n\n".join(parts) or "변경 없음"
-
-
-PR_BODY_TEMPLATE = """\
-## 자동 생성된 에러 수정 PR
-
-### 에러 정보
-| 항목 | 내용 |
-|------|------|
-| 타입 | `{error_type}` |
-| 메시지 | {error_message} |
-| 요청 | {request_url} |
-| 발생 시간 | {timestamp} |
-
-### 근본 원인
-{root_cause}
-
-### AI 분석
-{analysis}
-
-### 수정 내용
-{fix_description}
-
-### 수정된 파일
-{changed_files}
-
-### 변경 diff
-{diff_section}
-
----
-> 이 PR은 Error Bot이 자동으로 생성했습니다.
-> 반드시 코드 리뷰 후 머지하세요."""
-
-
-def _build_pr_body(report: "ErrorReport", result: dict, original_files: dict[str, str] | None = None) -> str:
-    changed_files_list = result.get("files", [])
-    changed_files = "\n".join(
-        f"- `{f['path']}`" for f in changed_files_list
-    ) or "- 없음"
-
-    diff_section = _build_diff(original_files or {}, changed_files_list)
-
-    return PR_BODY_TEMPLATE.format(
-        error_type=report.errorType,
-        error_message=report.errorMessage,
-        request_url=report.requestUrl,
-        timestamp=report.timestamp,
-        root_cause=result.get("root_cause", ""),
-        analysis=result.get("analysis", ""),
-        fix_description=result.get("fix_description", ""),
-        changed_files=changed_files,
-        diff_section=diff_section,
-    )
 
 
 async def process_error(report: ErrorReport) -> None:
@@ -203,7 +112,7 @@ async def process_error(report: ErrorReport) -> None:
 
         # 3-1. AI 응답 검증
         known_files = set(error_files.keys()) | set(context_files.keys())
-        validation_error = _validate_ai_result(result, known_files)
+        validation_error = validate_ai_result(result, known_files)
         if validation_error:
             logger.warning("AI 응답 검증 실패: %s", validation_error)
             await emit(make_event(error_id, "failed", f"AI 응답 검증 실패: {validation_error}"))
@@ -219,7 +128,7 @@ async def process_error(report: ErrorReport) -> None:
         branch_name = f"fix/error-{error_id}-{ts}"
 
         # 5. PR 본문 생성
-        pr_body = _build_pr_body(report, result, original_files={**error_files, **context_files})
+        pr_body = build_pr_body(report, result, original_files={**error_files, **context_files})
 
         # 6. GitHub PR 생성 (동기 → run_in_executor)
         await emit(make_event(error_id, "creating_pr", "PR 생성 중..."))

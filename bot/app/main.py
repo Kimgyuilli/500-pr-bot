@@ -4,17 +4,18 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
-import httpx
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from openai import OpenAI
 from sse_starlette.sse import EventSourceResponse
 
 from app.config import settings
-from app.error_handler import ErrorReport, process_error
+from app.error_handler import process_error
+from app.schemas import ErrorReport
 from app.event_store import get_error, get_history, subscribe
-from app.services.github_service import _get_repo
+from app.services.ai_provider import health_check as ai_health_check
+from app.services.discord_service import health_check as discord_health_check
+from app.services.github_service import health_check as github_health_check
 from app.test_runner import run_tests
 
 logging.basicConfig(level=logging.INFO)
@@ -38,33 +39,11 @@ async def dashboard():
 
 @app.get("/health")
 async def health():
-    services = {}
-
-    # OpenAI 검사
-    try:
-        client = OpenAI(api_key=settings.openai_api_key)
-        client.models.list()
-        services["openai"] = {"status": "ok"}
-    except Exception as e:
-        services["openai"] = {"status": "error", "detail": str(e)}
-
-    # GitHub 검사
-    try:
-        repo = _get_repo()
-        _ = repo.full_name
-        services["github"] = {"status": "ok"}
-    except Exception as e:
-        services["github"] = {"status": "error", "detail": str(e)}
-
-    # Discord 검사
-    try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.head(settings.discord_webhook_url)
-            resp.raise_for_status()
-        services["discord"] = {"status": "ok"}
-    except Exception as e:
-        services["discord"] = {"status": "error", "detail": str(e)}
-
+    services = {
+        "openai": ai_health_check(),
+        "github": github_health_check(),
+        "discord": await discord_health_check(),
+    }
     all_ok = all(s["status"] == "ok" for s in services.values())
     return {"status": "ok" if all_ok else "degraded", "services": services}
 

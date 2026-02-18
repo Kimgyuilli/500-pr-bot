@@ -41,6 +41,17 @@ class OpenAIProvider:
         return response.choices[0].message.content
 
 
+def health_check() -> dict:
+    """OpenAI API 연결 상태 확인."""
+    try:
+        provider = get_provider()
+        if isinstance(provider, OpenAIProvider):
+            provider._get_client().models.list()
+        return {"status": "ok"}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+
 _provider: AIProvider | None = None
 
 _PROVIDERS: dict[str, type] = {

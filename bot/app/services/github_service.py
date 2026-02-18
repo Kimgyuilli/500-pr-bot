@@ -19,6 +19,16 @@ def _get_repo():
     return _repo
 
 
+def health_check() -> dict:
+    """GitHub API 연결 상태 확인."""
+    try:
+        repo = _get_repo()
+        _ = repo.full_name
+        return {"status": "ok"}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+
 def fetch_file_content(file_path: str) -> str | None:
     """파일 내용을 조회한다. source_mode에 따라 로컬 또는 GitHub에서 읽는다. 없으면 None 반환."""
     if settings.source_mode == "local":

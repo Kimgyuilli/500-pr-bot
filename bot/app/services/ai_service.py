@@ -44,6 +44,21 @@ def _build_source_section(
     return "\n\n".join(parts)
 
 
+def validate_ai_result(result: dict, known_files: set[str]) -> str | None:
+    """AI 응답 검증. 문제 있으면 사유 문자열, 정상이면 None."""
+    files = result.get("files")
+    if not files:
+        return "수정 파일이 없음"
+    for f in files:
+        if "path" not in f or "content" not in f:
+            return "파일 항목에 path 또는 content 누락"
+        if f["path"] not in known_files:
+            return f"알 수 없는 파일 경로: {f['path']}"
+        if not f["content"].strip():
+            return f"빈 파일 내용: {f['path']}"
+    return None
+
+
 def analyze_error(
     error_type: str,
     error_message: str,

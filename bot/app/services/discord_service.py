@@ -10,6 +10,16 @@ logger = logging.getLogger(__name__)
 _client = httpx.AsyncClient()
 
 
+async def health_check() -> dict:
+    """Discord webhook 연결 상태 확인."""
+    try:
+        response = await _client.head(settings.discord_webhook_url)
+        response.raise_for_status()
+        return {"status": "ok"}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+
 async def _post_webhook(payload: dict) -> None:
     response = await _client.post(settings.discord_webhook_url, json=payload)
     response.raise_for_status()
