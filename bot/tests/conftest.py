@@ -6,6 +6,7 @@ os.environ.setdefault("GITHUB_TOKEN", "test-token")
 os.environ.setdefault("GITHUB_REPO", "owner/repo")
 os.environ.setdefault("BASE_PACKAGE", "com.myapp")
 os.environ.setdefault("DISCORD_WEBHOOK_URL", "https://discord.test/webhook")
+os.environ.setdefault("SOURCE_MODE", "github")
 
 from unittest.mock import AsyncMock, patch
 
@@ -56,6 +57,9 @@ _DISPLAY_NAMES = {
     "test_fetch_files_returns_dict_of_found_files": "GitHub - 여러 파일 딕셔너리로 반환",
     "test_create_pull_request_returns_pr_url": "GitHub - PR 생성 후 URL 반환",
     "test_create_pull_request_reuses_existing_branch": "GitHub - 기존 브랜치 재사용",
+    "test_local_fetch_file_content_reads_file": "로컬 모드 - 파일 읽기 정상 동작",
+    "test_local_fetch_file_content_returns_none_on_missing": "로컬 모드 - 존재하지 않는 파일 시 None 반환",
+    "test_local_fetch_files_returns_dict": "로컬 모드 - 여러 파일 딕셔너리 반환",
     # test_main
     "test_health_returns_ok": "API - 헬스체크 정상 응답",
     "test_webhook_returns_received": "API - 웹훅 수신 정상 응답",

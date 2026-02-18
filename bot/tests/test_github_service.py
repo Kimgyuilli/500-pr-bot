@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 from github import GithubException
 
 from app.services.github_service import create_pull_request, fetch_file_content, fetch_files
+from app.config import settings
 
 
 def _mock_repo():
@@ -103,3 +104,46 @@ def test_create_pull_request_reuses_existing_branch(mock_get_repo):
         branch_name="fix/error-abc-123",
     )
     assert url == "https://github.com/owner/repo/pull/2"
+
+
+# --- 로컬 모드 테스트 ---
+
+
+def test_local_fetch_file_content_reads_file(tmp_path):
+    (tmp_path / "src/main/java").mkdir(parents=True)
+    target = tmp_path / "src/main/java/Foo.java"
+    target.write_text("public class Foo {}", encoding="utf-8")
+
+    settings.source_mode = "local"
+    settings.local_source_path = str(tmp_path)
+    try:
+        result = fetch_file_content("src/main/java/Foo.java")
+        assert result == "public class Foo {}"
+    finally:
+        settings.source_mode = "github"
+        settings.local_source_path = ""
+
+
+def test_local_fetch_file_content_returns_none_on_missing(tmp_path):
+    settings.source_mode = "local"
+    settings.local_source_path = str(tmp_path)
+    try:
+        assert fetch_file_content("no/such/file.java") is None
+    finally:
+        settings.source_mode = "github"
+        settings.local_source_path = ""
+
+
+def test_local_fetch_files_returns_dict(tmp_path):
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a/A.java").write_text("class A", encoding="utf-8")
+
+    settings.source_mode = "local"
+    settings.local_source_path = str(tmp_path)
+    try:
+        result = fetch_files(["a/A.java", "b/Missing.java"])
+        assert "a/A.java" in result
+        assert "b/Missing.java" not in result
+    finally:
+        settings.source_mode = "github"
+        settings.local_source_path = ""

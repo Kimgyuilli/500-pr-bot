@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     bot_port: int = 8000
     import_depth: int = 1
     ai_provider: str = "openai"
+    source_mode: str = "github"
+    local_source_path: str = ""
 
     model_config = {"env_file": ".env"}
 

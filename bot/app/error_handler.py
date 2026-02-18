@@ -156,14 +156,14 @@ async def process_error(report: ErrorReport) -> None:
             await emit(make_event(error_id, "failed", "스택트레이스에서 프로젝트 코드를 찾지 못함"))
             return
 
-        # 2. GitHub에서 소스코드 조회 (동기 → run_in_executor)
+        # 2. 소스코드 조회 (동기 → run_in_executor)
         file_paths = [e["file"] for e in entries]
         await emit(make_event(error_id, "fetching", f"{len(file_paths)}개 파일 조회 중..."))
         loop = asyncio.get_running_loop()
         files = await loop.run_in_executor(None, partial(fetch_files, file_paths))
         if not files:
-            logger.warning("GitHub에서 파일을 조회하지 못함: %s", file_paths)
-            await emit(make_event(error_id, "failed", "GitHub에서 파일을 조회하지 못함"))
+            logger.warning("파일을 조회하지 못함: %s", file_paths)
+            await emit(make_event(error_id, "failed", "파일을 조회하지 못함"))
             return
 
         # 2-1. import 기반 관련 파일 추가 fetch (N depth)
