@@ -7,4 +7,4 @@ services:
       - ./bot/.env
     # 로컬 소스 모드 사용 시 볼륨 마운트 (SOURCE_MODE=local)
     # volumes:
-    #   - ./spring-project:/workspace/source:ro
+    #   - .:/workspace/source:ro
