@@ -5,7 +5,7 @@ Spring Boot 앱에서 500 에러 발생 시 AI가 자동으로 코드를 분석/
 ```
 Spring Boot 500 에러 → POST /webhook/error → 봇
   → Discord 에러 알림
-  → GitHub 코드 조회 (스택트레이스 파일 + import 관련 파일 N-depth)
+  → 소스코드 조회 (GitHub API 또는 로컬 파일, 스택트레이스 파일 + import 관련 파일 N-depth)
   → AI 분석/수정 (파싱 실패 시 피드백 재시도)
   → AI 응답 검증 (경로/내용 유효성)
   → PR 생성 (에러 정보, 근본 원인, AI 분석, 수정 내용, 변경 diff)
@@ -33,9 +33,18 @@ BASE_PACKAGE=com.myapp             # 스택트레이스 필터링용 패키지�
 DISCORD_WEBHOOK_URL=https://...    # Discord Webhook URL
 IMPORT_DEPTH=1                     # import 탐색 깊이 (기본값 1)
 AI_PROVIDER=openai                 # AI 제공자 (기본값 openai)
+SOURCE_MODE=github                 # 소스 조회 방식: github (API) 또는 local (로컬 파일)
+LOCAL_SOURCE_PATH=/workspace/source  # local 모드 시 소스코드 루트 경로 (컨테이너 내부 경로)
 ```
 
 ### 2. 봇 실행
+
+로컬 소스 모드 사용 시 `docker-compose.yml`에서 볼륨 마운트 확인:
+
+```yaml
+volumes:
+  - .:/workspace/source:ro
+```
 
 ```bash
 docker compose up --build -d
@@ -85,8 +94,10 @@ error-bot:
 │   │   ├── utils/
 │   │   │   └── stack_trace_parser.py  # 스택트레이스 파싱 + import 관련 파일 추출
 │   │   └── static/
-│   │       └── index.html             # 대시보드 UI (에러 봇 탭 + 테스트 실행 탭)
-│   ├── tests/                     # pytest 단위 테스트 (62개)
+│   │       ├── index.html             # 대시보드 UI (에러 봇 탭 + 테스트 실행 탭)
+│   │       ├── app.js                 # 대시보드 JS (SSE, 파이프라인, 소스 모드 전환)
+│   │       └── style.css              # 대시보드 스타일
+│   ├── tests/                     # pytest 단위 테스트 (65개)
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   └── .env.example
@@ -109,7 +120,7 @@ error_handler.process_error(ErrorReport):
   1. _is_duplicate()                          → 중복이면 무시
   2. discord_service.send_error_alert()       → Discord 에러 알림
   3. stack_trace_parser.parse_stack_trace()   → [{"file": "src/.../Foo.java", "class": "...", "line": 45}]
-  4. github_service.fetch_files(file_paths)   → {"src/.../Foo.java": "소스코드..."}
+  4. github_service.fetch_files(file_paths)   → {"src/.../Foo.java": "소스코드..."} (source_mode에 따라 GitHub API 또는 로컬 파일)
   5. import N-depth 탐색 루프 (settings.import_depth만큼 반복)
      → extract_related_imports() + fetch_files() 반복
   6. ai_service.analyze_error(error_files, context_files)
@@ -135,6 +146,8 @@ error_handler.process_error(ErrorReport):
 | GET | `/api/events` | SSE — 파이프라인 실시간 이벤트 스트림 |
 | GET | `/api/errors` | 최근 에러 히스토리 (최대 50건, 최신순) |
 | GET | `/api/errors/{error_id}` | 특정 에러 상세 (스택트레이스, AI 분석, PR 링크) |
+| GET | `/api/source-mode` | 현재 소스 조회 모드 반환 |
+| PUT | `/api/source-mode` | 소스 조회 모드 변경 (`{"source_mode": "github"\|"local"}`) |
 | POST | `/api/test-webhook` | 테스트용 샘플 에러 전송 |
 | GET | `/api/tests/stream` | SSE — pytest 실행 결과 실시간 스트림 |
 
@@ -157,7 +170,7 @@ error_handler.process_error(ErrorReport):
 `http://localhost:8000` 접속 시 웹 대시보드 제공. 탭 2개로 구성:
 
 - **서비스 상태**: OpenAI, GitHub, Discord 연결 상태를 실시간 표시 (60초 주기 갱신)
-- **에러 봇 탭**: 파이프라인 시각화 (5단계 상태 표시), 에러 히스토리 테이블 (클릭 시 상세 모달), 실시간 로그
+- **에러 봇 탭**: 소스 모드 전환 (GitHub/Local), 파이프라인 시각화 (5단계 상태 표시), 에러 히스토리 테이블 (클릭 시 상세 모달), 실시간 로그
 - **테스트 실행 탭**: pytest 원클릭 실행, 실시간 로그 스트리밍, 테스트 결과 표 (통과/실패 뱃지)
 
 SSE로 서버 이벤트를 실시간 수신하며, 연결 상태 표시기가 좌상단에 있음.
@@ -183,6 +196,7 @@ SSE로 서버 이벤트를 실시간 수신하며, 연결 상태 표시기가 �
 | PR 본문 형식 변경 | `error_handler.py` | `PR_BODY_TEMPLATE` 수정 |
 | 중복 필터 시간 변경 | `error_handler.py` | `DEDUP_TTL` 값 변경 (기본 1800초 = 30분) |
 | import 탐색 깊이 변경 | `bot/.env` | `IMPORT_DEPTH=2` 등으로 설정 (기본 1) |
+| 소스 조회를 로컬 파일로 변경 | `bot/.env`, `docker-compose.yml` | `SOURCE_MODE=local`, `LOCAL_SOURCE_PATH=/workspace/source` + 볼륨 마운트 |
 
 **핵심 원칙**: 각 모듈의 함수 시그니처와 반환 형식만 유지하면, 내부 구현은 자유롭게 교체 가능.
 
@@ -205,7 +219,7 @@ SSE로 서버 이벤트를 실시간 수신하며, 연결 상태 표시기가 �
 docker compose run --rm bot python -m pytest tests/ -v
 ```
 
-62개 단위 테스트: AI 서비스 (재시도/팩토리 포함), Discord 알림, 에러 처리 파이프라인 (검증/diff 포함), 이벤트 저장소, GitHub 서비스, API 엔드포인트 (헬스체크 포함), 스택트레이스 파서, 테스트 러너 파서.
+65개 단위 테스트: AI 서비스 (재시도/팩토리 포함), Discord 알림, 에러 처리 파이프라인 (검증/diff 포함), 이벤트 저장소, GitHub 서비스 (로컬 모드 포함), API 엔드포인트 (헬스체크 포함), 스택트레이스 파서, 테스트 러너 파서.
 
 ---
 
@@ -213,4 +227,4 @@ docker compose run --rm bot python -m pytest tests/ -v
 
 - AI가 생성한 코드는 **반드시 리뷰 후 머지** — 자동 머지 금지
 - 단순 에러(NPE, 타입 에러 등)에 효과적, 복잡한 비즈니스 로직 에러는 한계 있음
-- GitHub API로 조회하는 코드와 실제 실행 중인 코드가 다를 수 있음 (배포 후 추가 커밋이 있는 경우)
+- GitHub API로 조회하는 코드와 실제 실행 중인 코드가 다를 수 있음 (배포 후 추가 커밋이 있는 경우) — 로컬 모드(`SOURCE_MODE=local`)로 해결 가능
