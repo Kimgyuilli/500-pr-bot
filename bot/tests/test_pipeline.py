@@ -2,12 +2,15 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.error_handler import _build_diff, _validate_ai_result, process_error
+from app.pipeline import process_error
+from app.schemas import ErrorReport
+from app.services.ai_service import validate_ai_result
+from app.services.pr_builder import build_diff
 
 
 @pytest.fixture(autouse=True)
 def _mock_emit():
-    with patch("app.error_handler.emit", new_callable=AsyncMock):
+    with patch("app.pipeline.emit", new_callable=AsyncMock):
         yield
 
 
@@ -20,9 +23,9 @@ async def test_process_error_full_flow(sample_error_report, mock_discord):
         "summary": "NPE 수정",
     }
     with (
-        patch("app.error_handler.fetch_files", return_value={"Foo.java": "code"}),
-        patch("app.error_handler.analyze_error", return_value=ai_result),
-        patch("app.error_handler.create_pull_request", return_value="https://github.com/pr/1"),
+        patch("app.pipeline.fetch_files", return_value={"Foo.java": "code"}),
+        patch("app.pipeline.analyze_error", return_value=ai_result),
+        patch("app.pipeline.create_pull_request", return_value="https://github.com/pr/1"),
     ):
         await process_error(sample_error_report)
 
@@ -33,9 +36,9 @@ async def test_process_error_full_flow(sample_error_report, mock_discord):
 
 async def test_process_error_skips_duplicate(sample_error_report, mock_discord):
     with (
-        patch("app.error_handler.fetch_files", return_value={"Foo.java": "code"}),
-        patch("app.error_handler.analyze_error", return_value={"analysis": "", "root_cause": "", "fix_description": "", "files": [], "summary": "s"}),
-        patch("app.error_handler.create_pull_request", return_value="url"),
+        patch("app.pipeline.fetch_files", return_value={"Foo.java": "code"}),
+        patch("app.pipeline.analyze_error", return_value={"analysis": "", "root_cause": "", "fix_description": "", "files": [], "summary": "s"}),
+        patch("app.pipeline.create_pull_request", return_value="url"),
     ):
         await process_error(sample_error_report)
         await process_error(sample_error_report)  # 두 번째는 중복
@@ -45,8 +48,6 @@ async def test_process_error_skips_duplicate(sample_error_report, mock_discord):
 
 
 async def test_process_error_no_stack_entries(mock_discord):
-    from app.error_handler import ErrorReport
-
     report = ErrorReport(
         errorType="RuntimeException",
         errorMessage="error",
@@ -62,8 +63,8 @@ async def test_process_error_no_stack_entries(mock_discord):
 
 async def test_process_error_ai_failure_sends_failure_alert(sample_error_report, mock_discord):
     with (
-        patch("app.error_handler.fetch_files", return_value={"Foo.java": "code"}),
-        patch("app.error_handler.analyze_error", return_value=None),
+        patch("app.pipeline.fetch_files", return_value={"Foo.java": "code"}),
+        patch("app.pipeline.analyze_error", return_value=None),
     ):
         await process_error(sample_error_report)
 
@@ -79,9 +80,9 @@ async def test_process_error_ai_validation_failure_sends_failure_alert(sample_er
         "summary": "수정",
     }
     with (
-        patch("app.error_handler.fetch_files", return_value={"Foo.java": "code"}),
-        patch("app.error_handler.analyze_error", return_value=ai_result),
-        patch("app.error_handler.create_pull_request", return_value="url") as mock_pr,
+        patch("app.pipeline.fetch_files", return_value={"Foo.java": "code"}),
+        patch("app.pipeline.analyze_error", return_value=ai_result),
+        patch("app.pipeline.create_pull_request", return_value="url") as mock_pr,
     ):
         await process_error(sample_error_report)
 
@@ -90,33 +91,33 @@ async def test_process_error_ai_validation_failure_sends_failure_alert(sample_er
 
 
 def test_validate_ai_result_no_files():
-    assert _validate_ai_result({"files": []}, {"a.java"}) == "수정 파일이 없음"
+    assert validate_ai_result({"files": []}, {"a.java"}) == "수정 파일이 없음"
 
 
 def test_validate_ai_result_missing_path():
     result = {"files": [{"content": "code"}]}
-    assert _validate_ai_result(result, {"a.java"}) is not None
+    assert validate_ai_result(result, {"a.java"}) is not None
 
 
 def test_validate_ai_result_unknown_path():
     result = {"files": [{"path": "x.java", "content": "code"}]}
-    assert _validate_ai_result(result, {"a.java"}) is not None
+    assert validate_ai_result(result, {"a.java"}) is not None
 
 
 def test_validate_ai_result_empty_content():
     result = {"files": [{"path": "a.java", "content": "  "}]}
-    assert _validate_ai_result(result, {"a.java"}) is not None
+    assert validate_ai_result(result, {"a.java"}) is not None
 
 
 def test_validate_ai_result_valid():
     result = {"files": [{"path": "a.java", "content": "code"}]}
-    assert _validate_ai_result(result, {"a.java"}) is None
+    assert validate_ai_result(result, {"a.java"}) is None
 
 
 def test_build_diff_shows_changes():
     original = {"a.java": "line1\nline2\n"}
     modified = [{"path": "a.java", "content": "line1\nline2_modified\n"}]
-    diff = _build_diff(original, modified)
+    diff = build_diff(original, modified)
     assert "```diff" in diff
     assert "a.java" in diff
 
@@ -124,7 +125,7 @@ def test_build_diff_shows_changes():
 def test_build_diff_no_changes():
     original = {"a.java": "same\n"}
     modified = [{"path": "a.java", "content": "same\n"}]
-    assert _build_diff(original, modified) == "변경 없음"
+    assert build_diff(original, modified) == "변경 없음"
 
 
 async def test_pr_body_contains_diff_section(sample_error_report, mock_discord):
@@ -136,9 +137,9 @@ async def test_pr_body_contains_diff_section(sample_error_report, mock_discord):
         "summary": "수정",
     }
     with (
-        patch("app.error_handler.fetch_files", return_value={"Foo.java": "original_code"}),
-        patch("app.error_handler.analyze_error", return_value=ai_result),
-        patch("app.error_handler.create_pull_request", return_value="https://github.com/pr/1") as mock_pr,
+        patch("app.pipeline.fetch_files", return_value={"Foo.java": "original_code"}),
+        patch("app.pipeline.analyze_error", return_value=ai_result),
+        patch("app.pipeline.create_pull_request", return_value="https://github.com/pr/1") as mock_pr,
     ):
         await process_error(sample_error_report)
 
@@ -156,9 +157,9 @@ async def test_pr_body_contains_new_sections(sample_error_report, mock_discord):
         "summary": "NPE 수정",
     }
     with (
-        patch("app.error_handler.fetch_files", return_value={"Foo.java": "code"}),
-        patch("app.error_handler.analyze_error", return_value=ai_result),
-        patch("app.error_handler.create_pull_request", return_value="https://github.com/pr/1") as mock_pr,
+        patch("app.pipeline.fetch_files", return_value={"Foo.java": "code"}),
+        patch("app.pipeline.analyze_error", return_value=ai_result),
+        patch("app.pipeline.create_pull_request", return_value="https://github.com/pr/1") as mock_pr,
     ):
         await process_error(sample_error_report)
 
@@ -180,9 +181,9 @@ async def test_process_error_pr_failure_sends_failure_alert(sample_error_report,
         "summary": "수정",
     }
     with (
-        patch("app.error_handler.fetch_files", return_value={"Foo.java": "code"}),
-        patch("app.error_handler.analyze_error", return_value=ai_result),
-        patch("app.error_handler.create_pull_request", side_effect=RuntimeError("fail")),
+        patch("app.pipeline.fetch_files", return_value={"Foo.java": "code"}),
+        patch("app.pipeline.analyze_error", return_value=ai_result),
+        patch("app.pipeline.create_pull_request", side_effect=RuntimeError("fail")),
     ):
         await process_error(sample_error_report)
 

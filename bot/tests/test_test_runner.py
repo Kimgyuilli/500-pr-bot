@@ -1,4 +1,4 @@
-from app.test_runner import _parse_test_line
+from app.services.test_runner import _parse_test_line
 
 
 class TestParseTestLine:

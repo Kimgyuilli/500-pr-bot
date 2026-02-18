@@ -12,7 +12,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.error_handler import ErrorReport, _recent_errors
+from app.schemas import ErrorReport
+from app.pipeline import _recent_errors
 
 # pytest -v 출력 시 한글 표시명
 _DISPLAY_NAMES = {
@@ -25,7 +26,7 @@ _DISPLAY_NAMES = {
     "test_send_error_alert_posts_correct_embed": "Discord 알림 - 에러 알림 전송",
     "test_send_pr_alert_posts_correct_embed": "Discord 알림 - PR 생성 알림 전송",
     "test_send_failure_alert_posts_correct_embed": "Discord 알림 - 실패 알림 전송",
-    # test_error_handler
+    # test_pipeline
     "test_process_error_full_flow": "에러 처리 - 전체 플로우 정상 동작",
     "test_process_error_skips_duplicate": "에러 처리 - 중복 에러 무시",
     "test_process_error_no_stack_entries": "에러 처리 - 스택 항목 없으면 코드 조회 건너뜀",
@@ -61,7 +62,10 @@ _DISPLAY_NAMES = {
     "test_local_fetch_file_content_returns_none_on_missing": "로컬 모드 - 존재하지 않는 파일 시 None 반환",
     "test_local_fetch_files_returns_dict": "로컬 모드 - 여러 파일 딕셔너리 반환",
     # test_main
-    "test_health_returns_ok": "API - 헬스체크 정상 응답",
+    "test_health_all_ok": "API - 헬스체크 정상 응답",
+    "test_health_degraded_on_openai_failure": "API - OpenAI 실패 시 degraded",
+    "test_health_degraded_on_github_failure": "API - GitHub 실패 시 degraded",
+    "test_health_degraded_on_discord_failure": "API - Discord 실패 시 degraded",
     "test_webhook_returns_received": "API - 웹훅 수신 정상 응답",
     "test_webhook_rejects_invalid_body": "API - 잘못된 요청 바디 거부",
     # test_stack_trace_parser
@@ -120,8 +124,8 @@ def mock_discord():
         patch("app.services.discord_service.send_error_alert", new_callable=AsyncMock) as m_error,
         patch("app.services.discord_service.send_pr_alert", new_callable=AsyncMock) as m_pr,
         patch("app.services.discord_service.send_failure_alert", new_callable=AsyncMock) as m_fail,
-        patch("app.error_handler.send_error_alert", m_error),
-        patch("app.error_handler.send_pr_alert", m_pr),
-        patch("app.error_handler.send_failure_alert", m_fail),
+        patch("app.pipeline.send_error_alert", m_error),
+        patch("app.pipeline.send_pr_alert", m_pr),
+        patch("app.pipeline.send_failure_alert", m_fail),
     ):
         yield {"error": m_error, "pr": m_pr, "failure": m_fail}

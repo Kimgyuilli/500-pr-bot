@@ -1,6 +1,5 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -10,17 +9,11 @@ client = TestClient(app)
 
 def test_health_all_ok():
     """모든 서비스 정상이면 status=ok."""
-    mock_openai = MagicMock()
-    mock_repo = MagicMock()
-    mock_repo.full_name = "owner/repo"
-
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.raise_for_status = MagicMock()
-
-    with patch("app.main.OpenAI", return_value=mock_openai), \
-         patch("app.main._get_repo", return_value=mock_repo), \
-         patch("httpx.AsyncClient.head", new_callable=AsyncMock, return_value=mock_response):
+    with (
+        patch("app.routers.health.ai_health_check", return_value={"status": "ok"}),
+        patch("app.routers.health.github_health_check", return_value={"status": "ok"}),
+        patch("app.routers.health.discord_health_check", new_callable=AsyncMock, return_value={"status": "ok"}),
+    ):
         resp = client.get("/health")
 
     assert resp.status_code == 200
@@ -33,17 +26,11 @@ def test_health_all_ok():
 
 def test_health_degraded_on_openai_failure():
     """OpenAI 실패 시 status=degraded."""
-    mock_openai = MagicMock()
-    mock_openai.models.list.side_effect = RuntimeError("API key invalid")
-    mock_repo = MagicMock()
-    mock_repo.full_name = "owner/repo"
-
-    mock_response = MagicMock()
-    mock_response.raise_for_status = MagicMock()
-
-    with patch("app.main.OpenAI", return_value=mock_openai), \
-         patch("app.main._get_repo", return_value=mock_repo), \
-         patch("httpx.AsyncClient.head", new_callable=AsyncMock, return_value=mock_response):
+    with (
+        patch("app.routers.health.ai_health_check", return_value={"status": "error", "detail": "API key invalid"}),
+        patch("app.routers.health.github_health_check", return_value={"status": "ok"}),
+        patch("app.routers.health.discord_health_check", new_callable=AsyncMock, return_value={"status": "ok"}),
+    ):
         resp = client.get("/health")
 
     data = resp.json()
@@ -55,13 +42,11 @@ def test_health_degraded_on_openai_failure():
 
 def test_health_degraded_on_github_failure():
     """GitHub 실패 시 status=degraded."""
-    mock_openai = MagicMock()
-    mock_response = MagicMock()
-    mock_response.raise_for_status = MagicMock()
-
-    with patch("app.main.OpenAI", return_value=mock_openai), \
-         patch("app.main._get_repo", side_effect=RuntimeError("Bad token")), \
-         patch("httpx.AsyncClient.head", new_callable=AsyncMock, return_value=mock_response):
+    with (
+        patch("app.routers.health.ai_health_check", return_value={"status": "ok"}),
+        patch("app.routers.health.github_health_check", return_value={"status": "error", "detail": "Bad token"}),
+        patch("app.routers.health.discord_health_check", new_callable=AsyncMock, return_value={"status": "ok"}),
+    ):
         resp = client.get("/health")
 
     data = resp.json()
@@ -71,13 +56,11 @@ def test_health_degraded_on_github_failure():
 
 def test_health_degraded_on_discord_failure():
     """Discord 실패 시 status=degraded."""
-    mock_openai = MagicMock()
-    mock_repo = MagicMock()
-    mock_repo.full_name = "owner/repo"
-
-    with patch("app.main.OpenAI", return_value=mock_openai), \
-         patch("app.main._get_repo", return_value=mock_repo), \
-         patch("httpx.AsyncClient.head", new_callable=AsyncMock, side_effect=httpx.HTTPError("Webhook not found")):
+    with (
+        patch("app.routers.health.ai_health_check", return_value={"status": "ok"}),
+        patch("app.routers.health.github_health_check", return_value={"status": "ok"}),
+        patch("app.routers.health.discord_health_check", new_callable=AsyncMock, return_value={"status": "error", "detail": "Webhook not found"}),
+    ):
         resp = client.get("/health")
 
     data = resp.json()
@@ -85,7 +68,7 @@ def test_health_degraded_on_discord_failure():
     assert data["services"]["discord"]["status"] == "error"
 
 
-@patch("app.main.process_error", new_callable=AsyncMock)
+@patch("app.routers.webhook.process_error", new_callable=AsyncMock)
 def test_webhook_returns_received(mock_process):
     resp = client.post("/webhook/error", json={
         "errorType": "NPE",
