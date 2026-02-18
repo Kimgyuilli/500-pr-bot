@@ -112,6 +112,22 @@ async def _test_sse_generator():
         yield {"data": json.dumps(event, ensure_ascii=False)}
 
 
+@app.get("/api/source-mode")
+async def get_source_mode():
+    return {"source_mode": settings.source_mode}
+
+
+@app.put("/api/source-mode")
+async def set_source_mode(body: dict):
+    mode = body.get("source_mode", "")
+    if mode not in ("github", "local"):
+        return JSONResponse(status_code=400, content={"detail": "github 또는 local만 가능"})
+    if mode == "local" and not settings.local_source_path:
+        return JSONResponse(status_code=400, content={"detail": "LOCAL_SOURCE_PATH가 설정되지 않음"})
+    settings.source_mode = mode
+    return {"source_mode": mode}
+
+
 @app.post("/api/test-webhook")
 async def test_webhook():
     now = datetime.now(timezone.utc)

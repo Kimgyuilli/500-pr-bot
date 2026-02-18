@@ -174,6 +174,31 @@ function connectSSE() {
   };
 }
 
+// --- 소스 모드 전환 ---
+
+function setSourceMode(mode) {
+  fetch('/api/source-mode', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source_mode: mode }),
+  })
+    .then(r => {
+      if (!r.ok) return r.json().then(d => { alert(d.detail); throw new Error(); });
+      return r.json();
+    })
+    .then(() => updateModeButtons(mode))
+    .catch(() => {});
+}
+
+function updateModeButtons(mode) {
+  document.getElementById('modeGithub').classList.toggle('active', mode === 'github');
+  document.getElementById('modeLocal').classList.toggle('active', mode === 'local');
+}
+
+function loadSourceMode() {
+  fetch('/api/source-mode').then(r => r.json()).then(d => updateModeButtons(d.source_mode)).catch(() => {});
+}
+
 // --- 테스트 에러 전송 ---
 
 function sendTest() {
@@ -265,3 +290,4 @@ fetch('/api/errors').then(r => r.json()).then(renderHistory);
 connectSSE();
 checkHealth();
 setInterval(checkHealth, 60000);
+loadSourceMode();

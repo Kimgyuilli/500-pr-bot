@@ -53,6 +53,11 @@
 
   <div class="middle">
     <div class="test-section">
+      <div class="source-mode-toggle">
+        <span class="source-mode-label">소스 모드</span>
+        <button class="mode-btn active" id="modeGithub" onclick="setSourceMode('github')">GitHub</button>
+        <button class="mode-btn" id="modeLocal" onclick="setSourceMode('local')">Local</button>
+      </div>
       <button class="test-btn" id="testBtn" onclick="sendTest()">테스트 에러 전송</button>
     </div>
     <div class="history card">

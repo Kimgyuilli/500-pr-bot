@@ -137,8 +137,33 @@ h2 { font-size: 1.1rem; margin-bottom: 12px; color: var(--text-muted); font-weig
 }
 .test-section {
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
+  gap: 12px;
 }
+.source-mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.source-mode-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.mode-btn {
+  padding: 6px 14px;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.mode-btn:hover { color: var(--text-secondary); border-color: var(--text-faint); }
+.mode-btn.active { background: var(--bg-blue); color: var(--color-blue); border-color: var(--color-blue); }
 .test-btn {
   padding: 12px 24px;
   background: #238636;
