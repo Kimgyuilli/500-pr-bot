@@ -7,7 +7,9 @@ public class UserService {
 
     public String getUser(Long id) {
         String value = null;
-        // BUG: null 체크 없이 length() 호출
+        if (value == null) {
+            return "User name is not available";
+        }
         return "User name length: " + value.length();
     }
 }
