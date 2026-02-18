@@ -6,8 +6,10 @@ import org.springframework.stereotype.Service;
 public class UserService {
 
     public String getUser(Long id) {
-        String value = null;
-        // BUG: null 체크 없이 length() 호출
+        String value = null; // 사용자 이름 가져오는 로직 필요
+        if (value == null) {
+            return "User name length: 0";
+        }
         return "User name length: " + value.length();
     }
 }
